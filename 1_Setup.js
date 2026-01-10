@@ -293,12 +293,11 @@ function getNozzleCoverTargetStores() {
   }
   
   var today = new Date();
-  var currentMonth = today.getMonth() + 1; // 1-12
+  var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
   
-  // 1月〜3月は今年4月、4月以降は来年4月を実施予定とする
   var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  var targetApril = new Date(targetYear, 3, 1); // 4月1日
+  var targetApril = new Date(targetYear, 3, 1);
   
   var storeMap = {};
   
@@ -307,37 +306,26 @@ function getNozzleCoverTargetStores() {
     var locCode = row[col['拠点コード']];
     var locName = row[col['拠点名']];
     var eqId = String(row[col['設備ID']] || '');
-    var eqName = String(row[col['設備名']] || '');
     var installDate = row[col['設置日(前回実施)']];
     
     if (!locCode || !locName) continue;
     
-    // 計量機（ガソリン・灯油）を持つ店舗を抽出
-    var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01') || 
-                 eqName.includes('ガソリン計量機') || eqName.includes('灯油計量機') ||
-                 (eqName.includes('計量機') && (eqName.includes('ガソリン') || eqName.includes('灯油')));
+    var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01');
     
-    if (isPump) {
-      // 設置日があれば対象
-      if (installDate instanceof Date && !isNaN(installDate.getTime())) {
-        // 設置後2回目の4月（実施可能な最初の4月）を計算
-        var firstApril = getFirstAprilForNozzle(installDate);
-        
-        // 実施予定の4月時点で、firstAprilを過ぎているかチェック
-        if (targetApril >= firstApril) {
-          // 同じ店舗で複数の計量機がある場合は1店舗としてカウント
-          if (!storeMap[locCode]) {
-            storeMap[locCode] = {
-              code: locCode,
-              name: locName,
-              installDate: installDate,
-              firstApril: firstApril
-            };
-          }
+    if (isPump && installDate instanceof Date && !isNaN(installDate.getTime())) {
+      var firstApril = getFirstAprilForNozzle(installDate);
+      
+      if (targetApril >= firstApril) {
+        // 店舗コードをキーにして重複を防ぐ
+        if (!storeMap[locCode]) {
+          storeMap[locCode] = {
+            code: locCode,
+            name: locName,
+            installDate: installDate,
+            firstApril: firstApril
+          };
         }
       }
-      // 設置日がなくても、計量機があれば対象に含める（設置日がない場合は後で処理）
-      // ただし、今回は設置日があるもののみ対象とする
     }
   }
   
