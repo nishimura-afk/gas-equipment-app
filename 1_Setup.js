@@ -376,15 +376,22 @@ function createNozzleCoverDraftEmail(targetStores) {
  * ノズルカバー一括発注情報を取得（ダッシュボード表示用）
  */
 function getNozzleCoverInfo() {
+  Logger.log('=== getNozzleCoverInfo 開始 ===');
+  
   var targetStores = getNozzleCoverTargetStores();
+  Logger.log('targetStores.length: ' + targetStores.length);
+  Logger.log('targetStores: ' + JSON.stringify(targetStores));
+  
   var emailDraft = createNozzleCoverDraftEmail(targetStores);
   
   var today = new Date();
-  var currentMonth = today.getMonth() + 1; // 1-12
+  var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
   
-  // 1月〜3月は今年4月、4月以降は来年4月を実施予定とする
   var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  
+  Logger.log('targetYear: ' + targetYear);
+  Logger.log('hasAlert: ' + (targetStores.length > 0));
   
   return {
     config: {
