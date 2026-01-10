@@ -315,24 +315,29 @@ function getNozzleCoverTargetStores() {
     // 計量機（ガソリン・灯油）を持つ店舗を抽出
     var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01') || 
                  eqName.includes('ガソリン計量機') || eqName.includes('灯油計量機') ||
-                 eqName.includes('計量機') && (eqName.includes('ガソリン') || eqName.includes('灯油'));
+                 (eqName.includes('計量機') && (eqName.includes('ガソリン') || eqName.includes('灯油')));
     
-    if (isPump && installDate instanceof Date && !isNaN(installDate.getTime())) {
-      // 設置後2回目の4月（実施可能な最初の4月）を計算
-      var firstApril = getFirstAprilForNozzle(installDate);
-      
-      // 実施予定の4月時点で、firstAprilを過ぎているかチェック
-      if (targetApril >= firstApril) {
-        // 同じ店舗で複数の計量機がある場合は1店舗としてカウント
-        if (!storeMap[locCode]) {
-          storeMap[locCode] = {
-            code: locCode,
-            name: locName,
-            installDate: installDate,
-            firstApril: firstApril
-          };
+    if (isPump) {
+      // 設置日があれば対象
+      if (installDate instanceof Date && !isNaN(installDate.getTime())) {
+        // 設置後2回目の4月（実施可能な最初の4月）を計算
+        var firstApril = getFirstAprilForNozzle(installDate);
+        
+        // 実施予定の4月時点で、firstAprilを過ぎているかチェック
+        if (targetApril >= firstApril) {
+          // 同じ店舗で複数の計量機がある場合は1店舗としてカウント
+          if (!storeMap[locCode]) {
+            storeMap[locCode] = {
+              code: locCode,
+              name: locName,
+              installDate: installDate,
+              firstApril: firstApril
+            };
+          }
         }
       }
+      // 設置日がなくても、計量機があれば対象に含める（設置日がない場合は後で処理）
+      // ただし、今回は設置日があるもののみ対象とする
     }
   }
   
@@ -387,8 +392,11 @@ function getNozzleCoverInfo() {
   var emailDraft = createNozzleCoverDraftEmail(targetStores);
   
   var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1;
+  var currentMonth = today.getMonth() + 1; // 1-12
+  var currentYear = today.getFullYear();
+  
+  // 1月〜3月は今年4月、4月以降は来年4月を実施予定とする
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
   
   return {
     config: {
@@ -900,4 +908,92 @@ function testAllBulkOrders() {
     }
     Logger.log('');
   });
+}
+
+/**
+ * ノズルカバー対象店舗のデバッグ表示
+ */
+function debugNozzleCover() {
+  var config = getConfig();
+  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
+  var masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
+  var masterValues = masterSheet.getDataRange().getValues();
+  
+  Logger.log('=== ノズルカバー対象店舗デバッグ ===');
+  var today = new Date();
+  Logger.log('今日の日付: ' + today);
+  
+  var col = {};
+  masterValues[0].forEach(function(h, i) { col[h] = i; });
+  
+  var currentMonth = today.getMonth() + 1;
+  var currentYear = today.getFullYear();
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  var targetApril = new Date(targetYear, 3, 1);
+  
+  Logger.log('実施予定年: ' + targetYear + '年4月');
+  Logger.log('実施予定日: ' + targetApril);
+  Logger.log('---');
+  
+  var pumpCount = 0;
+  var eligibleCount = 0;
+  
+  for (var i = 1; i < masterValues.length; i++) {
+    var row = masterValues[i];
+    var locCode = row[col['拠点コード']];
+    var locName = row[col['拠点名']];
+    var eqId = String(row[col['設備ID']] || '');
+    var eqName = String(row[col['設備名']] || '');
+    var installDate = row[col['設置日(前回実施)']];
+    var partADate = row[col['部品A交換日']];
+    
+    if (!locCode || !locName) continue;
+    
+    // 計量機を持つ店舗を探す
+    var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01') || 
+                 eqName.includes('ガソリン計量機') || eqName.includes('灯油計量機') ||
+                 (eqName.includes('計量機') && (eqName.includes('ガソリン') || eqName.includes('灯油')));
+    
+    if (isPump) {
+      pumpCount++;
+      Logger.log('[' + locName + '] 設備ID: ' + eqId + ', 設備名: ' + eqName);
+      
+      if (installDate instanceof Date && !isNaN(installDate.getTime())) {
+        var baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
+        Logger.log('  基準日: ' + baseDate + ', 部品A交換日: ' + (partADate || 'なし'));
+        
+        // 設置後2回目の4月を計算
+        var year = baseDate.getFullYear();
+        var month = baseDate.getMonth();
+        var firstAprilYear = (month < 3) ? year + 1 : year + 2;
+        var firstApril = new Date(firstAprilYear, 3, 1);
+        
+        Logger.log('  初回実施可能日: ' + firstApril);
+        Logger.log('  実施予定日との比較: ' + targetApril + ' >= ' + firstApril + ' = ' + (targetApril >= firstApril));
+        
+        if (targetApril >= firstApril) {
+          eligibleCount++;
+          Logger.log('  ✓ 対象に含まれます');
+        } else {
+          Logger.log('  × まだ対象外（実施は' + firstAprilYear + '年4月以降）');
+        }
+      } else {
+        Logger.log('  × 設置日なし');
+      }
+      Logger.log('---');
+    }
+  }
+  
+  Logger.log('計量機設備数: ' + pumpCount);
+  Logger.log('対象店舗数: ' + eligibleCount);
+  
+  // 実際の関数も実行
+  var result = getNozzleCoverInfo();
+  Logger.log('getNozzleCoverInfo() の結果:');
+  Logger.log('hasAlert: ' + result.hasAlert);
+  Logger.log('targetCount: ' + result.targetCount);
+  Logger.log('targetYear: ' + result.targetYear);
+  if (result.targetStores && result.targetStores.length > 0) {
+    Logger.log('対象店舗: ' + result.targetStores.map(function(s) { return s.name; }).join(', '));
+  }
 }

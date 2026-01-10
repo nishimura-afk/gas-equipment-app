@@ -192,9 +192,6 @@
     <div class="bg-blue-50 p-3 border-b border-blue-200">
       <h3 class="text-lg font-bold text-blue-800"><i class="fas fa-calendar-alt mr-2"></i>【4月実施】定期部品交換・一括発注</h3>
     </div>
-    <!-- ノズルカバー交換アラート（毎年・全店対象） -->
-    <div id="nozzle-cover-alert" class="divide-y divide-blue-100" style="display: none;">
-    </div>
     <div id="bulk-order-alerts" class="divide-y divide-blue-100">
       <div class="p-4 text-center text-gray-400 text-sm">読み込み中...</div>
     </div>
@@ -349,27 +346,42 @@ function loadAllBulkOrderAlerts() {
 
 // ノズルカバー交換アラートを読み込んで表示
 function loadNozzleCoverAlert() {
+  console.log('loadNozzleCoverAlert 開始');
+  
   google.script.run
     .withSuccessHandler(function(info) {
-      const container = document.getElementById('nozzle-cover-alert');
-      if (!container) return;
+      console.log('getNozzleCoverInfo 成功:', info);
+      console.log('hasAlert:', info.hasAlert);
+      console.log('targetCount:', info.targetCount);
       
-      if (!info.hasAlert) {
-        container.style.display = 'none';
+      // bulk-order-alertsに直接表示する（nozzle-cover-alert要素は使わない）
+      const container = document.getElementById('bulk-order-alerts');
+      if (!container) {
+        console.error('bulk-order-alerts 要素が見つかりません');
         return;
       }
       
-      container.style.display = 'block';
+      // 既存のコンテンツをクリア
       container.innerHTML = '';
+      
+      if (!info.hasAlert || info.targetCount === 0) {
+        console.log('アラートなし: 対象店舗が0件');
+        // 他の一括発注アラートがあるかもしれないので、ここでは何も表示しない
+        return;
+      }
+      
+      console.log('アラート表示: 対象店舗' + info.targetCount + '件');
       
       const div = document.createElement('div');
       div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition bg-gradient-to-r from-amber-50 to-yellow-50';
       
       let storeList = '';
-      if (info.targetStores.length <= 8) {
-        storeList = info.targetStores.map(s => s.name).join(', ');
-      } else {
-        storeList = info.targetStores.slice(0, 5).map(s => s.name).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
+      if (info.targetStores && info.targetStores.length > 0) {
+        if (info.targetStores.length <= 8) {
+          storeList = info.targetStores.map(function(s) { return s.name; }).join(', ');
+        } else {
+          storeList = info.targetStores.slice(0, 5).map(function(s) { return s.name; }).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
+        }
       }
       
       div.innerHTML = `
@@ -400,17 +412,15 @@ function loadNozzleCoverAlert() {
         </div>
       `;
       
-      container.appendChild(div);
+      // 最上部に追加
+      container.insertBefore(div, container.firstChild);
       
       // グローバルに保存
       window.nozzleCoverData = info;
     })
     .withFailureHandler(function(error) {
       console.error('ノズルカバー情報の取得に失敗:', error);
-      const container = document.getElementById('nozzle-cover-alert');
-      if (container) {
-        container.style.display = 'none';
-      }
+      alert('ノズルカバー情報の取得に失敗しました: ' + error.message);
     })
     .getNozzleCoverInfo();
 }
