@@ -914,86 +914,77 @@ function testAllBulkOrders() {
  * ノズルカバー対象店舗のデバッグ表示
  */
 function debugNozzleCover() {
-  var config = getConfig();
-  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
-  var masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
-  var masterValues = masterSheet.getDataRange().getValues();
+  const config = getConfig();
+  const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
+  const masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
+  const masterValues = masterSheet.getDataRange().getValues();
   
   Logger.log('=== ノズルカバー対象店舗デバッグ ===');
-  var today = new Date();
-  Logger.log('今日の日付: ' + today);
+  Logger.log('今日の日付: ' + new Date());
   
-  var col = {};
-  masterValues[0].forEach(function(h, i) { col[h] = i; });
+  const col = {};
+  masterValues[0].forEach((h, i) => { col[h] = i; });
   
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  var targetApril = new Date(targetYear, 3, 1);
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const currentYear = today.getFullYear();
+  const targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  const targetApril = new Date(targetYear, 3, 1);
   
+  Logger.log('現在月: ' + currentMonth + '月');
   Logger.log('実施予定年: ' + targetYear + '年4月');
-  Logger.log('実施予定日: ' + targetApril);
   Logger.log('---');
   
-  var pumpCount = 0;
-  var eligibleCount = 0;
+  let pumpCount = 0;
+  let eligibleCount = 0;
+  const eligibleStores = [];
   
-  for (var i = 1; i < masterValues.length; i++) {
-    var row = masterValues[i];
-    var locCode = row[col['拠点コード']];
-    var locName = row[col['拠点名']];
-    var eqId = String(row[col['設備ID']] || '');
-    var eqName = String(row[col['設備名']] || '');
-    var installDate = row[col['設置日(前回実施)']];
-    var partADate = row[col['部品A交換日']];
+  for (let i = 1; i < masterValues.length; i++) {
+    const row = masterValues[i];
+    const locCode = row[col['拠点コード']];
+    const locName = row[col['拠点名']];
+    const eqId = String(row[col['設備ID']] || '');
+    const eqName = String(row[col['設備名']] || '');
+    const installDate = row[col['設置日(前回実施)']];
+    const partADate = row[col['部品A交換日']];
     
     if (!locCode || !locName) continue;
     
-    // 計量機を持つ店舗を探す
-    var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01') || 
-                 eqName.includes('ガソリン計量機') || eqName.includes('灯油計量機') ||
-                 (eqName.includes('計量機') && (eqName.includes('ガソリン') || eqName.includes('灯油')));
+    const isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01');
     
     if (isPump) {
       pumpCount++;
-      Logger.log('[' + locName + '] 設備ID: ' + eqId + ', 設備名: ' + eqName);
+      Logger.log(`[${locName}] 設備ID: ${eqId}`);
       
       if (installDate instanceof Date && !isNaN(installDate.getTime())) {
-        var baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
-        Logger.log('  基準日: ' + baseDate + ', 部品A交換日: ' + (partADate || 'なし'));
+        const baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
+        Logger.log(`  基準日: ${Utilities.formatDate(baseDate, 'JST', 'yyyy/MM/dd')}`);
         
-        // 設置後2回目の4月を計算
-        var year = baseDate.getFullYear();
-        var month = baseDate.getMonth();
-        var firstAprilYear = (month < 3) ? year + 1 : year + 2;
-        var firstApril = new Date(firstAprilYear, 3, 1);
+        const year = baseDate.getFullYear();
+        const month = baseDate.getMonth();
+        const firstAprilYear = (month < 3) ? year + 1 : year + 2;
+        const firstApril = new Date(firstAprilYear, 3, 1);
         
-        Logger.log('  初回実施可能日: ' + firstApril);
-        Logger.log('  実施予定日との比較: ' + targetApril + ' >= ' + firstApril + ' = ' + (targetApril >= firstApril));
+        Logger.log(`  初回実施可能日: ${firstAprilYear}年4月`);
+        Logger.log(`  判定: ${targetYear}年4月 >= ${firstAprilYear}年4月 = ${targetYear >= firstAprilYear}`);
         
-        if (targetApril >= firstApril) {
+        if (targetYear >= firstAprilYear) {
           eligibleCount++;
-          Logger.log('  ✓ 対象に含まれます');
+          eligibleStores.push(locName);
+          Logger.log(`  ✓ 対象に含まれます`);
         } else {
-          Logger.log('  × まだ対象外（実施は' + firstAprilYear + '年4月以降）');
+          Logger.log(`  × まだ対象外`);
         }
       } else {
-        Logger.log('  × 設置日なし');
+        Logger.log(`  × 設置日なし`);
       }
       Logger.log('---');
     }
   }
   
-  Logger.log('計量機設備数: ' + pumpCount);
-  Logger.log('対象店舗数: ' + eligibleCount);
-  
-  // 実際の関数も実行
-  var result = getNozzleCoverInfo();
-  Logger.log('getNozzleCoverInfo() の結果:');
-  Logger.log('hasAlert: ' + result.hasAlert);
-  Logger.log('targetCount: ' + result.targetCount);
-  Logger.log('targetYear: ' + result.targetYear);
-  if (result.targetStores && result.targetStores.length > 0) {
-    Logger.log('対象店舗: ' + result.targetStores.map(function(s) { return s.name; }).join(', '));
-  }
+  Logger.log('====================');
+  Logger.log(`計量機設備数: ${pumpCount}`);
+  Logger.log(`対象店舗数: ${eligibleCount}`);
+  Logger.log(`対象店舗: ${eligibleStores.join(', ')}`);
+  Logger.log('====================');
 }
