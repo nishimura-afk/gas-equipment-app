@@ -202,14 +202,14 @@
 function dashboardInit(f=false) {
   if(!f && window.g_cache.dashboard) { 
     renderDashboard(window.g_cache.dashboard); 
-    loadAllBulkOrderAlerts();
+    loadAllBulkOrderAlerts();  // ← この行を追加
     return; 
   }
   showLoading(true);
   google.script.run.withSuccessHandler(d => { 
     window.g_cache.dashboard=d; 
     renderDashboard(d); 
-    loadAllBulkOrderAlerts();
+    loadAllBulkOrderAlerts();  // ← この行を追加
   }).getDashboardData();
 }
 
