@@ -263,6 +263,149 @@ function getFirstApril(installDate) {
 }
 
 /**
+ * ノズルカバー交換用: 設置日から実施可能な最初の4月を計算
+ * 計量機更新後、2回目の4月を返す（更新後1回目の4月はスキップ）
+ */
+function getFirstAprilForNozzle(installDate) {
+  var year = installDate.getFullYear();
+  var month = installDate.getMonth(); // 0-11
+  
+  // 設置が1月〜3月なら翌年の4月、4月〜12月なら翌々年の4月（2回目の4月）
+  var firstAprilYear = (month < 3) ? year + 1 : year + 2;
+  return new Date(firstAprilYear, 3, 1); // 4月1日
+}
+
+/**
+ * ノズルカバー交換の対象店舗を取得
+ * 計量機を持つ全店舗が対象（計量機更新から1年未満は除外）
+ */
+function getNozzleCoverTargetStores() {
+  var config = getConfig();
+  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
+  var masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
+  var masterValues = masterSheet.getDataRange().getValues();
+  
+  if (masterValues.length <= 1) return [];
+  
+  var col = {};
+  for (var i = 0; i < masterValues[0].length; i++) {
+    col[masterValues[0][i]] = i;
+  }
+  
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1; // 1-12
+  var currentYear = today.getFullYear();
+  
+  // 1月〜3月は今年4月、4月以降は来年4月を実施予定とする
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  var targetApril = new Date(targetYear, 3, 1); // 4月1日
+  
+  var storeMap = {};
+  
+  for (var i = 1; i < masterValues.length; i++) {
+    var row = masterValues[i];
+    var locCode = row[col['拠点コード']];
+    var locName = row[col['拠点名']];
+    var eqId = String(row[col['設備ID']] || '');
+    var eqName = String(row[col['設備名']] || '');
+    var installDate = row[col['設置日(前回実施)']];
+    
+    if (!locCode || !locName) continue;
+    
+    // 計量機（ガソリン・灯油）を持つ店舗を抽出
+    var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01') || 
+                 eqName.includes('ガソリン計量機') || eqName.includes('灯油計量機') ||
+                 eqName.includes('計量機') && (eqName.includes('ガソリン') || eqName.includes('灯油'));
+    
+    if (isPump && installDate instanceof Date && !isNaN(installDate.getTime())) {
+      // 設置後2回目の4月（実施可能な最初の4月）を計算
+      var firstApril = getFirstAprilForNozzle(installDate);
+      
+      // 実施予定の4月時点で、firstAprilを過ぎているかチェック
+      if (targetApril >= firstApril) {
+        // 同じ店舗で複数の計量機がある場合は1店舗としてカウント
+        if (!storeMap[locCode]) {
+          storeMap[locCode] = {
+            code: locCode,
+            name: locName,
+            installDate: installDate,
+            firstApril: firstApril
+          };
+        }
+      }
+    }
+  }
+  
+  var result = [];
+  for (var key in storeMap) {
+    result.push(storeMap[key]);
+  }
+  
+  result.sort(function(a, b) {
+    return a.code > b.code ? 1 : -1;
+  });
+  
+  return result;
+}
+
+/**
+ * ノズルカバー交換メール下書き作成
+ */
+function createNozzleCoverDraftEmail(targetStores) {
+  if (targetStores.length === 0) return '現在、発注対象の店舗はありません。';
+  
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1;
+  var fiscalYear = (currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1;
+  
+  var body = '';
+  body += 'お世話になっております。\n\n';
+  body += fiscalYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n';
+  body += '【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
+  
+  for (var i = 0; i < targetStores.length; i++) {
+    var store = targetStores[i];
+    body += '- ' + store.name + '\n';
+  }
+  
+  body += '\n【実施予定】\n' + fiscalYear + '年4月\n\n';
+  body += '【発注先】\nタツノ\n\n';
+  body += 'よろしくお願いいたします。\n\n';
+  body += '--------------------------------------------------\n';
+  body += '日商有田株式会社\n';
+  body += 'nishimura@selfix.jp\n';
+  body += '--------------------------------------------------';
+  
+  return body;
+}
+
+/**
+ * ノズルカバー一括発注情報を取得（ダッシュボード表示用）
+ */
+function getNozzleCoverInfo() {
+  var targetStores = getNozzleCoverTargetStores();
+  var emailDraft = createNozzleCoverDraftEmail(targetStores);
+  
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1;
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1;
+  
+  return {
+    config: {
+      id: 'PARTS-PUMP-1Y',
+      name: 'ノズルカバー交換',
+      emoji: '📦',
+      vendor: 'タツノ'
+    },
+    hasAlert: targetStores.length > 0,
+    targetCount: targetStores.length,
+    targetStores: targetStores,
+    emailDraft: emailDraft,
+    targetYear: targetYear
+  };
+}
+
+/**
  * 一括発注対象店舗を取得（汎用）
  */
 function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
@@ -411,6 +554,86 @@ function getAllBulkOrderInfo() {
   }
   
   return results;
+}
+
+/**
+ * ノズルカバー交換Gmail下書き作成
+ */
+function createNozzleCoverGmailDraft() {
+  var config = getConfig();
+  var targetStores = getNozzleCoverTargetStores();
+  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
+  
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1;
+  var currentYear = today.getFullYear();
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  
+  var body = createNozzleCoverDraftEmail(targetStores);
+  var subject = '【' + targetYear + '年度】ノズルカバー交換 発注のご依頼';
+  
+  // ベンダーのメールアドレスを取得
+  var vendorEmail = '';
+  for (var key in config.VENDORS) {
+    var vendorName = config.VENDORS[key].name;
+    if (vendorName.includes('タツノ') || 'タツノ'.includes(vendorName.replace('株式会社', '').replace('有限会社', ''))) {
+      vendorEmail = config.VENDORS[key].email || '';
+      break;
+    }
+  }
+  
+  // Gmailの下書きを作成（送信元はnishimura@selfix.jp）
+  GmailApp.createDraft(vendorEmail || '', subject, body, {
+    from: 'nishimura@selfix.jp'
+  });
+  
+  return {
+    success: true,
+    message: 'Gmailの下書きを作成しました',
+    subject: subject,
+    recipient: vendorEmail || '（送信先未設定）'
+  };
+}
+
+/**
+ * ノズルカバー交換案件作成
+ */
+function createNozzleCoverProject() {
+  var config = getConfig();
+  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
+  var scheduleSheet = ss.getSheetByName(config.SHEET_NAMES.SCHEDULE);
+  
+  var targetStores = getNozzleCoverTargetStores();
+  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
+  
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1;
+  var currentYear = today.getFullYear();
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  var scheduledDate = new Date(targetYear, 3, 1); // 4月1日
+  var projectId = 'PARTS-PUMP-1Y-' + targetYear + '-' + Utilities.formatDate(new Date(), 'JST', 'MMddHHmmss');
+  
+  var newRow = [
+    projectId,
+    '全店',
+    'PARTS-PUMP-1Y',
+    '【一括発注】ノズルカバー交換 ' + targetStores.length + '店舗',
+    scheduledDate,
+    '見積依頼中',
+    '',
+    'タツノ'
+  ];
+  
+  scheduleSheet.appendRow(newRow);
+  var lastRow = scheduleSheet.getLastRow();
+  scheduleSheet.getRange(lastRow, 5).setNumberFormat('yyyy/MM/dd');
+  
+  return {
+    success: true,
+    projectId: projectId,
+    equipmentName: 'ノズルカバー交換',
+    targetCount: targetStores.length
+  };
 }
 
 /**

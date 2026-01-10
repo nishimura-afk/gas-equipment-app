@@ -192,6 +192,9 @@
     <div class="bg-blue-50 p-3 border-b border-blue-200">
       <h3 class="text-lg font-bold text-blue-800"><i class="fas fa-calendar-alt mr-2"></i>【4月実施】定期部品交換・一括発注</h3>
     </div>
+    <!-- ノズルカバー交換アラート（毎年・全店対象） -->
+    <div id="nozzle-cover-alert" class="divide-y divide-blue-100" style="display: none;">
+    </div>
     <div id="bulk-order-alerts" class="divide-y divide-blue-100">
       <div class="p-4 text-center text-gray-400 text-sm">読み込み中...</div>
     </div>
@@ -265,6 +268,10 @@ function renderDashboard(data) {
 
 // 全ての一括発注アラート読み込み
 function loadAllBulkOrderAlerts() {
+  // ノズルカバー交換アラートを読み込む
+  loadNozzleCoverAlert();
+  
+  // その他の一括発注アラートを読み込む
   google.script.run
     .withSuccessHandler(function(allInfo) {
       window.bulkOrderDataMap = {};
@@ -338,6 +345,181 @@ function loadAllBulkOrderAlerts() {
       }
     })
     .getAllBulkOrderInfo();
+}
+
+// ノズルカバー交換アラートを読み込んで表示
+function loadNozzleCoverAlert() {
+  google.script.run
+    .withSuccessHandler(function(info) {
+      const container = document.getElementById('nozzle-cover-alert');
+      if (!container) return;
+      
+      if (!info.hasAlert) {
+        container.style.display = 'none';
+        return;
+      }
+      
+      container.style.display = 'block';
+      container.innerHTML = '';
+      
+      const div = document.createElement('div');
+      div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition bg-gradient-to-r from-amber-50 to-yellow-50';
+      
+      let storeList = '';
+      if (info.targetStores.length <= 8) {
+        storeList = info.targetStores.map(s => s.name).join(', ');
+      } else {
+        storeList = info.targetStores.slice(0, 5).map(s => s.name).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
+      }
+      
+      div.innerHTML = `
+        <div class="flex items-start justify-between mb-2">
+          <div class="flex-1">
+            <div class="text-base font-bold text-blue-900 mb-1">
+              <span class="text-xl mr-2">${info.config.emoji}</span>
+              ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗（全店）
+            </div>
+            <div class="text-sm text-blue-700 ml-7 mt-1">
+              対象: ${storeList}
+            </div>
+            <div class="text-xs text-amber-600 ml-7 mt-1">
+              ※計量機更新から1年未満の店舗は除外
+            </div>
+          </div>
+        </div>
+        <div class="flex gap-2 ml-7 mt-2">
+          <button onclick="showNozzleCoverEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+            <i class="fas fa-envelope mr-1"></i>メール下書き
+          </button>
+          <button onclick="createNozzleCoverGmailDraft()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
+            <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
+          </button>
+          <button onclick="createNozzleCoverProject()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+            <i class="fas fa-clipboard-list mr-1"></i>案件作成
+          </button>
+        </div>
+      `;
+      
+      container.appendChild(div);
+      
+      // グローバルに保存
+      window.nozzleCoverData = info;
+    })
+    .withFailureHandler(function(error) {
+      console.error('ノズルカバー情報の取得に失敗:', error);
+      const container = document.getElementById('nozzle-cover-alert');
+      if (container) {
+        container.style.display = 'none';
+      }
+    })
+    .getNozzleCoverInfo();
+}
+
+// ノズルカバー交換メール下書き表示
+function showNozzleCoverEmailDraft() {
+  if (!window.nozzleCoverData) {
+    alert('データを読み込み中です');
+    return;
+  }
+  
+  const info = window.nozzleCoverData;
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
+  
+  const content = document.createElement('div');
+  content.className = 'bg-white rounded-lg shadow-2xl';
+  content.style.cssText = 'max-width: 700px; max-height: 85vh; width: 90%;';
+  
+  content.innerHTML = `
+    <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg">
+      <h2 class="text-xl font-bold"><i class="fas fa-envelope mr-2"></i>📦 ${info.config.name} - メール下書き</h2>
+    </div>
+    <div class="p-6">
+      <textarea id="nozzle-email-draft-text" readonly class="w-full h-96 font-mono text-sm p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" style="resize: none;">${info.emailDraft}</textarea>
+      <div class="mt-4 flex gap-3 justify-end">
+        <button onclick="copyNozzleEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-copy mr-2"></i>コピー
+        </button>
+        <button onclick="closeNozzleModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-times mr-2"></i>閉じる
+        </button>
+      </div>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  window.currentNozzleModal = modal;
+  
+  modal.onclick = function(e) {
+    if (e.target === modal) closeNozzleModal();
+  };
+}
+
+// ノズルカバー交換メール下書きをコピー
+function copyNozzleEmailDraft() {
+  const textarea = document.getElementById('nozzle-email-draft-text');
+  textarea.select();
+  textarea.setSelectionRange(0, 99999);
+  
+  try {
+    document.execCommand('copy');
+    alert('✅ メール下書きをクリップボードにコピーしました');
+  } catch (err) {
+    alert('❌ コピーに失敗しました。手動でコピーしてください。');
+  }
+}
+
+// ノズルカバー交換モーダルを閉じる
+function closeNozzleModal() {
+  if (window.currentNozzleModal) {
+    document.body.removeChild(window.currentNozzleModal);
+    window.currentNozzleModal = null;
+  }
+}
+
+// ノズルカバー交換Gmail下書き作成
+function createNozzleCoverGmailDraft() {
+  if (!confirm('Gmailの下書きを作成しますか？')) return;
+  
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      alert('✅ ' + result.message + '\n\n件名: ' + result.subject + '\n宛先: ' + result.recipient + '\n\nGmailの下書きを確認してください。');
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      alert('❌ Gmail下書き作成に失敗しました\n\n' + error);
+    })
+    .createNozzleCoverGmailDraft();
+}
+
+// ノズルカバー交換案件作成
+function createNozzleCoverProject() {
+  if (!window.nozzleCoverData) {
+    alert('データを読み込み中です');
+    return;
+  }
+  
+  const info = window.nozzleCoverData;
+  
+  if (!confirm(`ノズルカバー交換の一括案件を作成しますか?\n\n対象: ${info.targetCount}店舗（全店）\n実施予定: ${info.targetYear}年4月`)) {
+    return;
+  }
+  
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      alert(`✅ 案件を作成しました\n\n案件ID: ${result.projectId}\n設備: ${result.equipmentName}\n対象店舗: ${result.targetCount}店舗`);
+      navigate('projects');
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      alert('❌ 案件作成に失敗しました\n\n' + error);
+    })
+    .createNozzleCoverProject();
 }
 
 // Gmail下書き作成
