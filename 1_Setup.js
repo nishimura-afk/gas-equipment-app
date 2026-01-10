@@ -113,12 +113,10 @@ function calcStatusRow(installDate, partADate, partBDate, eqName, eqId, cycles, 
   const today = new Date();
   const isValidDate = (d) => d instanceof Date && !isNaN(d.getTime());
 
-  var bulkOrderIds = ['PARTS-PUMP-1Y', 'PARTS-SEAL-3Y', 'CHG-01', 'PARTS-PUMP-4Y', 'PARTS-K-PANEL-7Y'];
-  var isBulkOrder = bulkOrderIds.some(function(id) { return eqId.includes(id); });
-  
-  if (isBulkOrder) {
-    let matchedKey = findCycleKey(eqId, eqName, cycles);
-    if (matchedKey) category = cycles[matchedKey].category;
+  // seasonal設備は通常判定をスキップ（ダッシュボードの一括発注アラートで表示）
+  let matchedKeyForSeasonal = findCycleKey(eqId, eqName, cycles);
+  if (matchedKeyForSeasonal && cycles[matchedKeyForSeasonal].seasonal) {
+    category = cycles[matchedKeyForSeasonal].category;
     return { partA: status.NORMAL, partB: status.NORMAL, body: status.NORMAL, monthsA: 0, nextDate: null, category };
   }
 
@@ -316,6 +314,7 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
         storeMap[locCode] = {
           code: locCode,
           name: locName,
+          equipmentName: eqName, // 設備名を追加
           lastDate: baseDate,
           firstApril: firstApril,
           yearsSinceFirstApril: yearsSinceFirstApril,
@@ -354,7 +353,10 @@ function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
   }
   var fiscalYear = targetYear; // 実施年度
   
-  var body = '件名: 【' + fiscalYear + '年度】' + configItem.name + ' 発注のご依頼\n\n';
+  // 計量器設備かどうかを判定（PARTS-PUMP-1Y, PARTS-PUMP-4Y は計量器）
+  var isMeasuringEquipment = (configItem.id === 'PARTS-PUMP-1Y' || configItem.id === 'PARTS-PUMP-4Y');
+  
+  var body = '';
   body += 'お世話になっております。\n\n';
   body += fiscalYear + '年度の' + configItem.name + 'の発注をお願いいたします。\n\n';
   body += '【対象店舗: ' + targetStores.length + '店舗】\n';
@@ -363,12 +365,22 @@ function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
     var store = targetStores[i];
     var lastYear = store.lastDate.getFullYear();
     var lastMonth = store.lastDate.getMonth() + 1;
-    body += '- ' + store.name + '（前回: ' + lastYear + '年' + lastMonth + '月）\n';
+    body += '- ' + store.name + '（前回: ' + lastYear + '年' + lastMonth + '月）';
+    
+    // 計量器設備の場合、設備名を記載（型式・仕様は記載しない）
+    if (isMeasuringEquipment && store.equipmentName) {
+      body += '\n  ' + store.equipmentName;
+    }
+    body += '\n';
   }
   
   body += '\n【実施予定】\n' + targetYear + '年4月\n\n';
   body += '【発注先】\n' + configItem.vendor + '\n\n';
-  body += 'よろしくお願いいたします。\n';
+  body += 'よろしくお願いいたします。\n\n';
+  body += '--------------------------------------------------\n';
+  body += '日商有田株式会社\n';
+  body += 'nishimura@selfix.jp\n';
+  body += '--------------------------------------------------';
   return body;
 }
 
@@ -399,6 +411,55 @@ function getAllBulkOrderInfo() {
   }
   
   return results;
+}
+
+/**
+ * 一括発注メール下書きをGmailに作成
+ */
+function createBulkOrderGmailDraft(equipmentId) {
+  var config = getConfig();
+  var configs = getBulkOrderConfigs();
+  var cfg = null;
+  for (var i = 0; i < configs.length; i++) {
+    if (configs[i].id === equipmentId) {
+      cfg = configs[i];
+      break;
+    }
+  }
+  
+  if (!cfg) throw new Error('設備IDが見つかりません: ' + equipmentId);
+  
+  var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
+  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
+  
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1;
+  var currentYear = today.getFullYear();
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  
+  var body = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
+  var subject = '【' + targetYear + '年度】' + cfg.name + ' 発注のご依頼';
+  
+  // ベンダーのメールアドレスを取得（ベンダー名でマッチング）
+  var vendorEmail = '';
+  for (var key in config.VENDORS) {
+    var vendorName = config.VENDORS[key].name;
+    // 'タツノ' は '株式会社タツノ' に、'シャープ' は 'シャープ' にマッチ
+    if (vendorName.includes(cfg.vendor) || cfg.vendor.includes(vendorName.replace('株式会社', '').replace('有限会社', ''))) {
+      vendorEmail = config.VENDORS[key].email || '';
+      break;
+    }
+  }
+  
+  // Gmailの下書きを作成（送信元はnishimura@selfix.jp、ただしGmailApp.createDraftでは送信元を指定できないため、署名に記載済み）
+  GmailApp.createDraft(vendorEmail || '', subject, body);
+  
+  return {
+    success: true,
+    message: 'Gmailの下書きを作成しました',
+    subject: subject,
+    recipient: vendorEmail || '（送信先未設定）'
+  };
 }
 
 /**

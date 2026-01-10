@@ -106,7 +106,7 @@ const SHEET_NAMES = {
     'PARTS_CHANGE_3Y':     { category: '部材更新', years: 3, label: '釣銭機シール貼替', searchKey: 'シール', suffix: 'PARTS-SEAL-3Y', seasonal: true },
     'PARTS_PUMP_4Y':       { category: '部材更新', years: 4, label: '計量機部品(4年)', searchKey: '油種シール', suffix: 'PARTS-PUMP-4Y', seasonal: true },
     'MAINT_WELL_5Y':       { category: 'メンテ', years: 5, label: '井戸ポンプメンテ', searchKey: '井戸メンテ', suffix: 'MAINT-WELL-5Y' },
-    'PARTS_CHANGE_6Y':     { category: '部材更新', years: 6, label: '釣銭機カバー/パネル', searchKey: '釣銭機', suffix: 'CHG-01', seasonal: false },
+    'PARTS_CHANGE_6Y':     { category: '部材更新', years: 6, label: '釣銭機カバー/パネル', searchKey: '釣銭機', suffix: 'CHG-01', seasonal: true },
     'PARTS_KEROSENE_7Y':   { category: '部材更新', years: 7, label: '灯油パネル更新', searchKey: '灯油パネル', suffix: 'PARTS-K-PANEL-7Y', seasonal: true }
   };
 

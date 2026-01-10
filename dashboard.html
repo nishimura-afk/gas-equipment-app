@@ -186,6 +186,16 @@
       </table>
     </div>
   </div>
+
+  <!-- 4月実施一括発注アラート -->
+  <div class="bg-white rounded-lg border-2 border-blue-200 shadow-md overflow-hidden">
+    <div class="bg-blue-50 p-3 border-b border-blue-200">
+      <h3 class="text-lg font-bold text-blue-800"><i class="fas fa-calendar-alt mr-2"></i>【4月実施】定期部品交換・一括発注</h3>
+    </div>
+    <div id="bulk-order-alerts" class="divide-y divide-blue-100">
+      <div class="p-4 text-center text-gray-400 text-sm">読み込み中...</div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -258,43 +268,105 @@ function loadAllBulkOrderAlerts() {
   google.script.run
     .withSuccessHandler(function(allInfo) {
       window.bulkOrderDataMap = {};
+      window.bulkOrderData = allInfo;
+      
+      const container = document.getElementById('bulk-order-alerts');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      
+      const hasAnyAlert = allInfo.some(info => info.hasAlert);
+      
+      if (!hasAnyAlert) {
+        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
+        return;
+      }
       
       allInfo.forEach(function(info) {
         const equipmentId = info.config.id;
         window.bulkOrderDataMap[equipmentId] = info;
         
-        if (info.hasAlert) {
-          const alertBox = document.getElementById('bulk-alert-' + equipmentId);
-          if (alertBox) {
-            alertBox.style.display = 'block';
-            
-            const counts = alertBox.querySelectorAll('.bulk-target-count');
-            counts.forEach(function(el) {
-              el.textContent = info.targetCount + '店舗';
-            });
-            
-            const countTexts = alertBox.querySelectorAll('.bulk-target-count-text');
-            countTexts.forEach(function(el) {
-              el.textContent = info.targetCount;
-            });
-            
-            // 実施予定年度を表示（1月〜3月は今年、4月以降は来年）
-            const years = alertBox.querySelectorAll('.bulk-target-year');
-            const targetYear = info.targetYear || new Date().getFullYear();
-            years.forEach(function(el) {
-              el.textContent = targetYear;
-            });
-          }
+        if (!info.hasAlert) return;
+        
+        const div = document.createElement('div');
+        div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition';
+        
+        const today = new Date();
+        const currentMonth = today.getMonth() + 1;
+        const targetYear = info.targetYear || ((currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1);
+        
+        let storeList = '';
+        if (info.targetStores.length <= 5) {
+          storeList = info.targetStores.map(s => s.name).join(', ');
+        } else {
+          storeList = info.targetStores.slice(0, 3).map(s => s.name).join(', ') + ' 他' + (info.targetStores.length - 3) + '店舗';
         }
+        
+        div.innerHTML = `
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex-1">
+              <div class="text-base font-bold text-blue-900 mb-1">
+                <span class="text-xl mr-2">${info.config.emoji}</span>
+                ${info.config.name} (${targetYear}年4月実施予定) - ${info.targetCount}店舗
+              </div>
+              <div class="text-sm text-blue-700 ml-7">
+                対象: ${storeList}
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-2 ml-7 mt-2">
+            <button onclick="showBulkEmailDraft('${equipmentId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+              <i class="fas fa-envelope mr-1"></i>メール下書き
+            </button>
+            <button onclick="createBulkOrderGmailDraftFor('${equipmentId}')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
+              <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
+            </button>
+            <button onclick="createBulkOrderProjectFor('${equipmentId}')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+              <i class="fas fa-clipboard-list mr-1"></i>案件作成
+            </button>
+          </div>
+        `;
+        
+        container.appendChild(div);
       });
     })
     .withFailureHandler(function(error) {
       console.error('一括発注情報の取得に失敗:', error);
+      const container = document.getElementById('bulk-order-alerts');
+      if (container) {
+        container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">一括発注情報の読み込みに失敗しました</div>';
+      }
     })
     .getAllBulkOrderInfo();
 }
 
+// Gmail下書き作成
+function createBulkOrderGmailDraftFor(equipmentId) {
+  if (!confirm('Gmailの下書きを作成しますか？')) return;
+  
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      alert('✅ ' + result.message + '\n\n件名: ' + result.subject + '\n宛先: ' + result.recipient + '\n\nGmailの下書きを確認してください。');
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      alert('❌ Gmail下書き作成に失敗しました\n\n' + error);
+    })
+    .createBulkOrderGmailDraft(equipmentId);
+}
+
 // メール下書きを表示
+function showBulkEmailDraft(equipmentId) {
+  const info = window.bulkOrderData ? window.bulkOrderData.find(d => d.config.id === equipmentId) : (window.bulkOrderDataMap ? window.bulkOrderDataMap[equipmentId] : null);
+  if (!info) {
+    alert('データの読み込み中です。しばらくお待ちください。');
+    return;
+  }
+  showBulkOrderDraft(equipmentId);
+}
+
 function showBulkOrderDraft(equipmentId) {
   if (!window.bulkOrderDataMap || !window.bulkOrderDataMap[equipmentId]) {
     alert('データの読み込み中です。しばらくお待ちください。');
