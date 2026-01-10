@@ -1,0 +1,44 @@
+<div id="modal-complete" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-lg shadow-2xl w-full max-w-md">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-lg font-bold text-slate-800"><i class="fas fa-check-circle text-blue-600 mr-2"></i>作業完了報告</h3>
+      <button onclick="closeCompModal()" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+    </div>
+    <input type="hidden" id="comp-id"><input type="hidden" id="comp-row-num">
+    <div class="space-y-4">
+      <div class="bg-slate-50 p-3 rounded text-sm border">
+        <div class="flex justify-between"><span class="text-slate-500">拠点:</span> <span class="font-bold" id="comp-loc"></span></div>
+        <div class="flex justify-between"><span class="text-slate-500">設備:</span> <span class="font-bold" id="comp-eq"></span></div>
+        <div class="flex justify-between"><span class="text-slate-500">作業:</span> <span class="font-bold text-blue-600" id="comp-work"></span></div>
+      </div>
+      <div><label class="block text-sm font-bold mb-1 text-slate-600">完了日</label><input type="date" class="w-full border rounded p-2 bg-white" id="comp-date"></div>
+      <div class="bg-yellow-50 p-3 rounded border border-yellow-200">
+        <label class="block text-sm font-bold mb-1 text-yellow-800"><i class="fas fa-file-invoice-dollar mr-1"></i>補助金利用 (記録)</label>
+        <input type="text" id="comp-subsidy" class="w-full border border-yellow-300 rounded p-2" placeholder="例: 省エネ補助金 (50万円)">
+      </div>
+      <div class="flex justify-end space-x-2 pt-2">
+        <button onclick="closeCompModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded">キャンセル</button>
+        <button onclick="submitCompletion()" class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold shadow">確定して保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+function openCompleteModal(id, num, date, work, loc, eq) {
+  document.getElementById('comp-id').value=id; document.getElementById('comp-row-num').value=num;
+  document.getElementById('comp-loc').innerText=loc; document.getElementById('comp-eq').innerText=eq; document.getElementById('comp-work').innerText=work;
+  document.getElementById('comp-subsidy').value='';
+  if(date) document.getElementById('comp-date').value=date.replace(/\//g,'-'); else document.getElementById('comp-date').valueAsDate=new Date();
+  document.getElementById('modal-complete').classList.remove('hidden');
+}
+function closeCompModal() { document.getElementById('modal-complete').classList.add('hidden'); }
+function submitCompletion() {
+  const date = document.getElementById('comp-date').value;
+  if(!date) return alert('完了日は必須です');
+  showLoading(true); closeCompModal();
+  google.script.run.withSuccessHandler(()=>{
+    alert('完了報告を記録しました');
+    clearCache('progress'); if(window.progressInit) progressInit(true);
+  }).withFailureHandler(e=>{ showLoading(false); alert('エラー: '+e); }).completeExchange(document.getElementById('comp-id').value, date, document.getElementById('comp-subsidy').value);
+}
+</script>

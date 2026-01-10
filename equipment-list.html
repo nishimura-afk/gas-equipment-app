@@ -1,0 +1,159 @@
+<div class="space-y-4">
+  <div class="flex flex-col md:flex-row justify-between items-center gap-4 bg-slate-50 p-4 rounded-lg border">
+    <div>
+      <h2 class="text-lg font-bold text-slate-800"><i class="fas fa-list mr-2 text-blue-600"></i>全設備ステータス一覧</h2>
+    </div>
+    
+    <div class="flex flex-wrap items-center gap-3">
+      <div class="flex items-center bg-white border rounded px-2 py-1">
+        <i class="fas fa-calendar-alt text-gray-400 mr-2"></i>
+        <select id="filter-year" class="text-sm outline-none bg-transparent" onchange="applyFilters()">
+          <option value="ALL">全期間</option>
+          <option value="THIS_YEAR">今年度実施 (~3月)</option>
+          <option value="NEXT_YEAR">来年度実施 (4月~)</option>
+        </select>
+      </div>
+
+      <div class="flex items-center bg-white border rounded px-2 py-1">
+        <i class="fas fa-filter text-gray-400 mr-2"></i>
+        <select id="filter-loc" class="text-sm outline-none bg-transparent" onchange="applyFilters()">
+          <option value="ALL">全拠点表示</option>
+        </select>
+      </div>
+      
+      <label class="flex items-center cursor-pointer bg-white border rounded px-3 py-1 hover:bg-amber-50 transition select-none">
+        <input type="checkbox" id="filter-alert" class="mr-2 accent-amber-500" onchange="applyFilters()">
+        <span class="text-sm font-bold text-amber-700"><i class="fas fa-exclamation-triangle mr-1"></i>アラートのみ</span>
+      </label>
+
+      <button onclick="listInit(true)" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm transition shadow">
+        <i class="fas fa-sync-alt mr-1"></i> 更新
+      </button>
+    </div>
+  </div>
+
+  <div class="overflow-x-auto border rounded-lg shadow bg-white">
+    <table class="w-full text-sm text-left whitespace-nowrap">
+      <thead class="bg-slate-100 text-slate-700">
+        <tr>
+          <th class="p-3 border-b w-32">拠点名</th>
+          <th class="p-3 border-b">設備名</th>
+          <th class="p-3 border-b w-24">次回予定</th>
+          <th class="p-3 border-b text-center w-32">消耗品/点検<br><span class="text-xs text-gray-400">(部品A)</span></th>
+          <th class="p-3 border-b text-center w-32">定期整備<br><span class="text-xs text-gray-400">(部品B)</span></th>
+          <th class="p-3 border-b text-center w-28">本体更新<br><span class="text-xs text-gray-400">(入替)</span></th>
+          <th class="p-3 border-b text-center w-16">編集</th>
+        </tr>
+      </thead>
+      <tbody id="list-table-body" class="divide-y bg-white"><tr><td colspan="7" class="p-8 text-center text-gray-500">読み込み中...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="eq-memo-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-96 border-t-4 border-blue-600">
+    <h3 class="text-lg font-bold mb-4 text-gray-800"><i class="fas fa-edit mr-2 text-blue-600"></i>設備情報編集</h3>
+    <p class="text-sm font-bold text-gray-700 mb-4" id="eq-memo-title"></p>
+    <input type="hidden" id="eq-memo-shop"><input type="hidden" id="eq-memo-id">
+    <div class="mb-4"><label class="block text-xs font-bold text-slate-500 mb-1">型式・仕様・契約容量</label><input type="text" id="eq-spec-text" class="w-full border rounded p-2"></div>
+    <div class="mb-4"><label class="block text-xs font-bold text-slate-500 mb-1">次回作業メモ</label><textarea id="eq-memo-text" class="w-full border rounded p-2 h-24"></textarea></div>
+    <div class="flex justify-end space-x-2"><button onclick="closeEqMemoModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">キャンセル</button><button onclick="saveEqMemo()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold shadow">保存</button></div>
+  </div>
+</div>
+
+<script>
+let fullList = [];
+
+function listInit(f=false) {
+  if(!f && window.g_cache.list) { 
+    fullList = window.g_cache.list;
+    initLocFilter(fullList);
+    applyFilters(); 
+    return; 
+  }
+  showLoading(true); 
+  google.script.run.withSuccessHandler(l => { 
+    window.g_cache.list=l; 
+    fullList = l;
+    initLocFilter(l);
+    applyFilters(); 
+  }).getEquipmentList();
+}
+
+function initLocFilter(list) {
+  const sel = document.getElementById('filter-loc');
+  if (sel.options.length > 1) return;
+  const locs = new Set();
+  list.forEach(r => locs.add(r['拠点名']));
+  const sortedLocs = Array.from(locs).sort();
+  sortedLocs.forEach(loc => {
+    const op = document.createElement('option');
+    op.value = loc; op.innerText = loc; sel.appendChild(op);
+  });
+}
+
+function applyFilters() {
+  const locFilter = document.getElementById('filter-loc').value;
+  const alertFilter = document.getElementById('filter-alert').checked;
+  const yearFilter = document.getElementById('filter-year').value;
+  
+  const today = new Date();
+  const thisYearEnd = new Date(today.getFullYear() + (today.getMonth() < 3 ? 0 : 1), 2, 31);
+  const nextYearEnd = new Date(thisYearEnd.getFullYear() + 1, 2, 31);
+
+  const filtered = fullList.filter(r => {
+    if (locFilter !== 'ALL' && r['拠点名'] !== locFilter) return false;
+    
+    if (alertFilter) {
+      const hasIssue = (r['部品Aステータス'] !== '正常') || (r['部品Bステータス'] !== '正常' && r['部品Bステータス']) || (r['本体ステータス'] !== '正常');
+      if (!hasIssue) return false;
+    }
+
+    if (yearFilter !== 'ALL') {
+      const nextDateStr = r['次回予定日'];
+      if (!nextDateStr) return false;
+      const nextDate = new Date(nextDateStr);
+      
+      if (yearFilter === 'THIS_YEAR') {
+        if (nextDate > thisYearEnd) return false;
+      } else if (yearFilter === 'NEXT_YEAR') {
+        if (nextDate <= thisYearEnd || nextDate > nextYearEnd) return false;
+      }
+    }
+    return true;
+  });
+  
+  renderList(filtered);
+}
+
+function renderList(list) {
+  showLoading(false); const tb = document.getElementById('list-table-body'); tb.innerHTML = '';
+  if(!list||list.length===0) { tb.innerHTML='<tr><td colspan="7" class="p-8 text-center text-gray-500">条件に一致するデータがありません</td></tr>'; return; }
+  list.sort((a,b)=>(a['拠点コード']>b['拠点コード'])?1:-1);
+  list.forEach(r => {
+    const tr = document.createElement('tr'); tr.className = "hover:bg-slate-50 transition group";
+    const badge = (s) => {
+      if(s==='期限超過'||s==='実施時期') return `<span class="inline-block px-2 py-1 rounded bg-red-100 text-red-700 font-bold text-xs border border-red-200">${s}</span>`;
+      if(s==='注意') return `<span class="inline-block px-2 py-1 rounded bg-amber-100 text-amber-700 font-bold text-xs border border-amber-200">${s}</span>`;
+      if(s==='正常') return `<span class="text-emerald-600 text-xs"><i class="fas fa-check mr-1"></i>正常</span>`;
+      return `<span class="text-gray-300 text-xs">-</span>`;
+    };
+    const eqName = r['設備名']||r['設備ID'];
+    const nextDate = r['次回予定日'] || '<span class="text-gray-300">-</span>';
+    
+    tr.innerHTML = `
+      <td class="p-3 font-bold text-slate-700 border-r border-slate-100">${r['拠点名']}</td>
+      <td class="p-3 border-r border-slate-100"><div class="font-bold text-slate-800">${eqName}</div>${r['spec']?`<div class="text-xs text-blue-600 mt-1"><i class="fas fa-tag mr-1"></i>${r['spec']}</div>`:''}</td>
+      <td class="p-3 font-mono text-slate-800 border-r border-slate-100 font-bold bg-slate-50">${nextDate}</td>
+      <td class="p-3 text-center border-r border-slate-100">${badge(r['部品Aステータス'])}</td>
+      <td class="p-3 text-center border-r border-slate-100">${badge(r['部品Bステータス'])}</td>
+      <td class="p-3 text-center border-r border-slate-100">${badge(r['本体ステータス'])}</td>
+      <td class="p-3 text-center"><button onclick="openEqMemoModal('${r['拠点コード']}','${r['設備ID']}','${eqName}','${(r['nextWorkMemo']||'').replace(/\n/g,'\\n')}','${r['spec']||''}')" class="w-8 h-8 rounded-full border flex items-center justify-center mx-auto transition ${(r['nextWorkMemo']||r['spec'])?'text-blue-600 bg-blue-50 border-blue-200':'text-gray-400 bg-gray-100 hover:bg-gray-200'}"><i class="fas fa-edit"></i></button></td>
+    `;
+    tb.appendChild(tr);
+  });
+}
+function openEqMemoModal(s,i,n,m,p) { document.getElementById('eq-memo-shop').value=s; document.getElementById('eq-memo-id').value=i; document.getElementById('eq-memo-title').innerText=`${s} / ${n}`; document.getElementById('eq-memo-text').value=m; document.getElementById('eq-spec-text').value=p; document.getElementById('eq-memo-modal').classList.remove('hidden'); }
+function closeEqMemoModal() { document.getElementById('eq-memo-modal').classList.add('hidden'); }
+function saveEqMemo() { showLoading(true); closeEqMemoModal(); google.script.run.withSuccessHandler(()=>{window.g_cache.list=null;listInit(true);}).saveNextWorkMemo(document.getElementById('eq-memo-shop').value,document.getElementById('eq-memo-id').value,document.getElementById('eq-memo-text').value,document.getElementById('eq-spec-text').value); }
+</script>

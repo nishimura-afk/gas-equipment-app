@@ -1,0 +1,57 @@
+<div class="space-y-6">
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-indigo-50 p-6 rounded shadow border border-indigo-200">
+      <h2 class="text-lg font-bold mb-2 text-indigo-800"><i class="fas fa-truck-loading mr-2"></i>部品・定期メンテの発注</h2>
+      <p class="text-sm text-indigo-700 mb-4">
+        アラート中の設備を<strong>ベンダー別</strong>に自動で振り分け、まとめ発注メールを作成します。<br>
+        ※案件ステータスは<strong>「発注済」</strong>になります。
+      </p>
+      <button onclick="createVendorDrafts()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded shadow transition">
+        <i class="fas fa-paper-plane mr-2"></i>ベンダー別まとめ発注
+      </button>
+    </div>
+
+    <div class="bg-amber-50 p-6 rounded shadow border border-amber-200">
+      <h2 class="text-lg font-bold mb-2 text-amber-800"><i class="fas fa-file-invoice-dollar mr-2"></i>個別の見積依頼</h2>
+      <p class="text-sm text-amber-700 mb-4">
+        アラート中の全案件について、<strong>1件ずつ「見積依頼メール」</strong>の下書きを作成します。<br>
+        ※案件ステータスは<strong>「見積依頼中」</strong>になります。
+      </p>
+      <button onclick="createAutoDrafts()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-6 rounded shadow transition">
+        <i class="fas fa-mail-bulk mr-2"></i>一括見積依頼
+      </button>
+    </div>
+  </div>
+
+  <div class="bg-white p-6 rounded shadow border mt-4">
+    <h2 class="text-lg font-bold mb-4 text-slate-800"><i class="fas fa-pen mr-2"></i>手動で個別作成</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div class="bg-slate-50 p-4 rounded border space-y-4">
+        <div><label class="block text-xs font-bold text-slate-500 mb-1">対象拠点</label><select id="email-loc-select" class="w-full border rounded p-2 bg-white" onchange="filterEquipments()"><option value="">読み込み中...</option></select></div>
+        <div><label class="block text-xs font-bold text-slate-500 mb-1">対象設備</label><select id="email-eq-select" class="w-full border rounded p-2 bg-white"><option value="">拠点を選択してください</option></select></div>
+        <div><label class="block text-xs font-bold text-slate-500 mb-1">作業内容</label><input type="text" id="email-work-input" class="w-full border rounded p-2" placeholder="例: 本体入替の見積もり"></div>
+        <div class="flex flex-col gap-2">
+          <button onclick="generateDraft()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition shadow"><i class="fas fa-eye mr-1"></i> 文面プレビュー</button>
+          <button onclick="saveSingleDraftAndProject()" class="w-full bg-green-600 text-white font-bold py-2 rounded hover:bg-green-700 transition shadow hidden" id="btn-save-single"><i class="fas fa-paper-plane mr-1"></i> 下書き保存＆案件登録</button>
+        </div>
+      </div>
+      <div class="flex flex-col"><textarea id="email-result" class="flex-1 w-full border rounded p-4 font-mono text-sm bg-white text-slate-700 leading-relaxed h-48" placeholder="プレビューボタンを押すとここに文面が表示されます"></textarea></div>
+    </div>
+  </div>
+
+  <div id="gmail-link-area" class="hidden text-center p-4 bg-gray-100 rounded border border-gray-300">
+    <p class="text-sm text-gray-600 mb-2">下書きの作成が完了しました</p>
+    <a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" class="inline-block bg-white text-red-600 border border-red-600 hover:bg-red-50 font-bold py-2 px-6 rounded shadow transition"><i class="fab fa-google mr-2"></i>Gmailの下書きを確認する</a>
+  </div>
+</div>
+<script>
+let allEquipments = [];
+function emailInit(f=false) { if(!f && window.g_cache.list) { allEquipments=window.g_cache.list; populateEmailSelect(allEquipments); return; } google.script.run.withSuccessHandler(l=>{window.g_cache.list=l;allEquipments=l;populateEmailSelect(l);}).getEquipmentList(); }
+function populateEmailSelect(l) { const s=document.getElementById('email-loc-select'); s.innerHTML='<option value="">選択してください...</option>'; const m=new Map(); l.forEach(i=>m.set(i['拠点コード'],i['拠点名'])); m.forEach((n,c)=>{const o=document.createElement('option');o.value=c;o.innerText=n;s.appendChild(o);}); }
+function filterEquipments() { const c=document.getElementById('email-loc-select').value; const s=document.getElementById('email-eq-select'); s.innerHTML='<option value="">設備を選択...</option>'; if(!c)return; allEquipments.filter(e=>e['拠点コード']===c).forEach(t=>{const o=document.createElement('option');o.value=t['設備ID'];o.text=t['設備名']||t['設備ID'];s.appendChild(o);}); }
+function generateDraft() { const ls=document.getElementById('email-loc-select'); if(!ls.value)return alert('拠点を選択してください'); showLoading(true); google.script.run.withSuccessHandler(r=>{document.getElementById('email-result').value=r;document.getElementById('btn-save-single').classList.remove('hidden');document.getElementById('gmail-link-area').classList.add('hidden');showLoading(false);}).generateQuoteRequest(ls.options[ls.selectedIndex].text,document.getElementById('email-eq-select').options[document.getElementById('email-eq-select').selectedIndex].text,document.getElementById('email-work-input').value); }
+function createAutoDrafts() { if(!confirm('一括見積依頼を作成しますか？'))return; showLoading(true); google.script.run.withSuccessHandler(r=>{showLoading(false);alert(r.message);document.getElementById('gmail-link-area').classList.remove('hidden');}).createAlertDrafts(); }
+function createVendorDrafts() { if(!confirm('ベンダー別にまとめて発注メールを作成し、案件を「発注済」にしますか？'))return; showLoading(true); google.script.run.withSuccessHandler(r=>{showLoading(false);alert(r.message);document.getElementById('gmail-link-area').classList.remove('hidden');}).createVendorBatchDrafts(); }
+function saveSingleDraftAndProject() { if(!confirm('保存しますか？'))return; const ls=document.getElementById('email-loc-select'); const es=document.getElementById('email-eq-select'); showLoading(true); google.script.run.withSuccessHandler(()=>{showLoading(false);alert('登録しました');document.getElementById('btn-save-single').classList.add('hidden');document.getElementById('email-result').value='';document.getElementById('gmail-link-area').classList.remove('hidden');}).createSingleDraftAndProject(ls.options[ls.selectedIndex].text,ls.value,es.options[es.selectedIndex].text,es.value,document.getElementById('email-work-input').value,document.getElementById('email-result').value); }
+</script>

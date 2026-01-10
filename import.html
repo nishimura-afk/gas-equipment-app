@@ -1,0 +1,266 @@
+<div class="space-y-6">
+  <div class="flex justify-between items-center border-b pb-4">
+    <div>
+      <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-file-import mr-2"></i>見積・資料インポート</h2>
+      <p class="text-sm text-gray-600">PDF見積書を取り込み、案件と紐付けて整理します。</p>
+    </div>
+  </div>
+
+  <div class="flex space-x-1 bg-gray-100 p-1 rounded-lg">
+    <button onclick="switchTab('inbox')" id="tab-inbox" class="flex-1 py-2 px-4 rounded-md text-sm font-bold bg-white shadow text-blue-600 transition">
+      <i class="fas fa-inbox mr-2"></i>受信BOX (自動検知)
+    </button>
+    <button onclick="switchTab('drive')" id="tab-drive" class="flex-1 py-2 px-4 rounded-md text-sm font-bold text-gray-500 hover:bg-gray-200 transition">
+      <i class="fab fa-google-drive mr-2"></i>Driveフォルダ指定
+    </button>
+    <button onclick="switchTab('local')" id="tab-local" class="flex-1 py-2 px-4 rounded-md text-sm font-bold text-gray-500 hover:bg-gray-200 transition">
+      <i class="fas fa-laptop mr-2"></i>PCからアップロード
+    </button>
+  </div>
+
+  <div id="area-inbox" class="tab-content">
+    <div class="bg-blue-50 border border-blue-200 rounded p-4 mb-4 flex justify-between items-center">
+      <div>
+        <h3 class="font-bold text-blue-800">SS見積_受信BOX</h3>
+        <p class="text-xs text-blue-600">Gmail等の添付ファイルをこのフォルダに入れてください。</p>
+      </div>
+      <button onclick="scanInbox()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 shadow">
+        <i class="fas fa-sync-alt mr-1"></i> 再スキャン
+      </button>
+    </div>
+    <div id="inbox-list" class="space-y-2">
+      <div class="p-8 text-center text-gray-400">スキャン中...</div>
+    </div>
+  </div>
+
+  <div id="area-drive" class="tab-content hidden">
+    <div class="bg-white border rounded p-6 text-center">
+      <p class="mb-4 text-sm text-gray-600">過去の見積書が保存されているDriveフォルダIDを入力してください。</p>
+      <div class="flex max-w-lg mx-auto gap-2">
+        <input type="text" id="drive-folder-id" class="flex-1 border rounded p-2 text-sm" placeholder="フォルダID (URLの末尾部分)">
+        <button onclick="scanDrive()" class="bg-gray-700 text-white px-6 py-2 rounded font-bold hover:bg-gray-800">
+          <i class="fas fa-search mr-1"></i> 検索
+        </button>
+      </div>
+    </div>
+    <div id="drive-list" class="space-y-2 mt-4"></div>
+  </div>
+
+  <div id="area-local" class="tab-content hidden">
+    <div class="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50 hover:bg-gray-100 transition relative" id="drop-zone">
+      <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect(this)">
+      <div class="pointer-events-none">
+        <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
+        <p class="font-bold text-gray-600">ここにファイルをドラッグ&ドロップ</p>
+        <p class="text-xs text-gray-400 mt-1">またはクリックして選択 (PDFのみ)</p>
+      </div>
+    </div>
+    <div id="upload-preview" class="mt-4 hidden">
+      <div class="bg-white p-4 border rounded shadow-sm">
+        <div class="flex justify-between items-center mb-2">
+          <span class="font-bold" id="upload-filename"></span>
+          <span class="text-xs text-gray-400" id="upload-size"></span>
+        </div>
+        <div class="mb-2">
+          <label class="text-xs font-bold text-gray-500">紐付ける案件を選択</label>
+          <select id="upload-project-select" class="w-full border rounded p-2 mt-1"></select>
+        </div>
+        <button onclick="execUpload()" class="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 shadow">
+          アップロードして登録
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bulk-action-area" class="hidden fixed bottom-6 right-6 z-50">
+    <button onclick="execBulkImport()" class="bg-green-600 text-white px-8 py-4 rounded-full shadow-lg font-bold hover:bg-green-700 flex items-center transform transition hover:scale-105">
+      <i class="fas fa-check-circle text-xl mr-2"></i>
+      <span id="bulk-count">0</span>件を登録して整理
+    </button>
+  </div>
+</div>
+
+<script>
+let currentFiles = []; 
+let allProjects = []; 
+
+function importInit() {
+  google.script.run.withSuccessHandler(list => {
+    allProjects = list.map(item => ({
+      val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
+      label: `【新規】${item['拠点名']} - ${item['設備名']}`
+    }));
+    scanInbox();
+  }).getEquipmentList();
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('area-' + tab).classList.remove('hidden');
+  document.querySelectorAll('button[id^="tab-"]').forEach(btn => {
+    btn.classList.remove('bg-white', 'shadow', 'text-blue-600');
+    btn.classList.add('text-gray-500', 'hover:bg-gray-200');
+  });
+  const activeBtn = document.getElementById('tab-' + tab);
+  activeBtn.classList.remove('text-gray-500', 'hover:bg-gray-200');
+  activeBtn.classList.add('bg-white', 'shadow', 'text-blue-600');
+}
+
+function scanInbox() {
+  showLoading(true);
+  document.getElementById('inbox-list').innerHTML = '<div class="p-4 text-center">スキャン中...</div>';
+  google.script.run.withSuccessHandler(renderFiles).scanInboxFiles();
+}
+
+function scanDrive() {
+  const id = document.getElementById('drive-folder-id').value;
+  if(!id) return alert('フォルダIDを入力してください');
+  showLoading(true);
+  google.script.run.withSuccessHandler(res => {
+    if(!res.success) { showLoading(false); alert(res.error); return; }
+    renderFiles(res);
+  }).scanDriveFolder(id);
+}
+
+function renderFiles(res) {
+  showLoading(false);
+  const container = document.querySelector('.tab-content:not(.hidden) div[id$="-list"]');
+  container.innerHTML = '';
+  
+  if (res.files.length === 0) {
+    container.innerHTML = '<div class="p-8 text-center text-gray-400">PDFファイルは見つかりませんでした</div>';
+    document.getElementById('bulk-action-area').classList.add('hidden');
+    return;
+  }
+
+  currentFiles = res.files; 
+
+  res.files.forEach((file, idx) => {
+    const div = document.createElement('div');
+    div.className = "bg-white p-3 rounded border flex items-center justify-between hover:bg-gray-50";
+    
+    let selectHtml = `<select class="border rounded p-1 text-sm max-w-xs import-select" data-idx="${idx}">`;
+    selectHtml += `<option value="">-- 選択してください --</option>`;
+    
+    if (file.suggestion) {
+      const val = (file.suggestion.type === 'NEW') 
+        ? `NEW:${file.suggestion.locCode}:${file.suggestion.eqId}`
+        : `EXISTING:${file.suggestion.id}`;
+      selectHtml += `<option value="${val}" selected>💡 ${file.suggestion.label}</option>`;
+      selectHtml += `<option disabled>──────────</option>`;
+    }
+    
+    allProjects.forEach(p => { selectHtml += `<option value="${p.val}">${p.label}</option>`; });
+    selectHtml += `</select>`;
+
+    div.innerHTML = `
+      <div class="flex items-center gap-3 overflow-hidden">
+        <input type="checkbox" class="import-check w-5 h-5 accent-blue-600" data-idx="${idx}" ${file.suggestion ? 'checked' : ''} onchange="updateBulkCount()">
+        <div class="min-w-0">
+          <div class="font-bold truncate text-sm"><a href="${file.url}" target="_blank" class="text-blue-600 hover:underline"><i class="fas fa-file-pdf mr-1"></i>${file.name}</a></div>
+          <div class="text-xs text-gray-400">${file.lastUpdated}</div>
+        </div>
+      </div>
+      <div>${selectHtml}</div>
+    `;
+    container.appendChild(div);
+  });
+  
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const count = document.querySelectorAll('.import-check:checked').length;
+  document.getElementById('bulk-count').innerText = count;
+  if(count > 0) document.getElementById('bulk-action-area').classList.remove('hidden');
+  else document.getElementById('bulk-action-area').classList.add('hidden');
+}
+
+function execBulkImport() {
+  const checked = document.querySelectorAll('.import-check:checked');
+  if(checked.length === 0) return;
+  if(!confirm(`${checked.length}件のファイルを登録し、処理済フォルダに移動しますか？`)) return;
+
+  const targets = [];
+  let error = false;
+
+  checked.forEach(el => {
+    const idx = el.dataset.idx;
+    const file = currentFiles[idx];
+    const select = document.querySelector(`.import-select[data-idx="${idx}"]`);
+    const val = select.value;
+    
+    if (!val) { error = true; select.classList.add('border-red-500'); }
+    else {
+      select.classList.remove('border-red-500');
+      const parts = val.split(':');
+      targets.push({
+        fileId: file.id,
+        projectType: parts[0],
+        projectId: parts[0]==='EXISTING'?parts[1]:null,
+        locCode: parts[0]==='NEW'?parts[1]:null,
+        eqId: parts[0]==='NEW'?parts[2]:null
+      });
+    }
+  });
+
+  if (error) return alert('紐付け先が選択されていないファイルがあります');
+
+  showLoading(true);
+  google.script.run.withSuccessHandler(res => {
+    showLoading(false);
+    alert(res.message);
+    const activeTab = document.querySelector('button[id^="tab-"].text-blue-600').id.replace('tab-', '');
+    if(activeTab === 'inbox') scanInbox();
+    else if(activeTab === 'drive') scanDrive();
+  }).executeImport(targets);
+}
+
+let uploadFile = null;
+
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (!file || file.type !== 'application/pdf') return alert('PDFファイルを選択してください');
+  
+  uploadFile = file;
+  document.getElementById('upload-preview').classList.remove('hidden');
+  document.getElementById('upload-filename').innerText = file.name;
+  document.getElementById('upload-size').innerText = (file.size/1024).toFixed(1) + ' KB';
+  
+  const sel = document.getElementById('upload-project-select');
+  sel.innerHTML = '<option value="">選択してください</option>';
+  allProjects.forEach(p => {
+    const op = document.createElement('option');
+    op.value = p.val;
+    op.innerText = p.label;
+    sel.appendChild(op);
+  });
+}
+
+function execUpload() {
+  const sel = document.getElementById('upload-project-select');
+  if(!sel.value) return alert('案件を選択してください');
+  if(!uploadFile) return;
+
+  const parts = sel.value.split(':');
+  const projectInfo = {
+    type: parts[0],
+    id: parts[0]==='EXISTING'?parts[1]:null,
+    locCode: parts[0]==='NEW'?parts[1]:null,
+    eqId: parts[0]==='NEW'?parts[2]:null
+  };
+
+  showLoading(true);
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const base64 = e.target.result.split(',')[1];
+    google.script.run.withSuccessHandler(res => {
+      showLoading(false);
+      alert('アップロードと登録が完了しました');
+      document.getElementById('upload-preview').classList.add('hidden');
+      uploadFile = null;
+    }).uploadAndImport(base64, uploadFile.name, uploadFile.type, projectInfo);
+  };
+  reader.readAsDataURL(uploadFile);
+}
+</script>

@@ -1,0 +1,214 @@
+<div class="space-y-8">
+  <div class="flex justify-between items-center border-b pb-4">
+    <div>
+      <h2 class="text-2xl font-bold text-gray-800"><i class="fas fa-tasks mr-2"></i>案件管理</h2>
+      <p class="text-sm text-gray-600">見積依頼から日程調整、作業完了報告までを一元管理します。</p>
+    </div>
+    <button onclick="progressInit(true)" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded text-sm font-bold transition">
+      <i class="fas fa-sync-alt mr-1"></i> 更新
+    </button>
+  </div>
+
+  <div class="bg-white rounded-lg shadow border overflow-hidden">
+    <div class="bg-blue-50 p-4 border-b">
+      <div class="flex items-center text-xs text-gray-600 justify-between px-4 overflow-x-auto">
+        <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold mr-2">1</span>見積依頼中</div>
+        <div class="flex-grow border-t-2 border-gray-200 mx-2 min-w-[10px]"></div>
+        <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-2">2</span>見積受領</div>
+        <div class="flex-grow border-t-2 border-gray-200 mx-2 min-w-[10px]"></div>
+        <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold mr-2">3</span>発注済</div>
+        <div class="flex-grow border-t-2 border-gray-200 mx-2 min-w-[10px]"></div>
+        <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold mr-2">4</span>日程確定</div>
+        <div class="flex-grow border-t-2 border-gray-200 mx-2 min-w-[10px]"></div>
+        <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold mr-2"><i class="fas fa-check"></i></span>完了</div>
+      </div>
+    </div>
+    
+    <div id="progress-list-container" class="divide-y bg-white">
+      <div class="p-8 text-center text-gray-500">読み込み中...</div>
+    </div>
+  </div>
+  
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+    <div class="bg-indigo-50 rounded-lg shadow border border-indigo-200 p-4">
+      <h3 class="text-sm font-bold text-indigo-800 mb-2 border-b border-indigo-200 pb-1">法定検査</h3>
+      <div id="new-legal-container" class="space-y-2"><div class="text-xs text-gray-400">なし</div></div>
+    </div>
+    <div class="bg-rose-50 rounded-lg shadow border border-rose-200 p-4">
+      <h3 class="text-sm font-bold text-rose-800 mb-2 border-b border-rose-200 pb-1">本体更新</h3>
+      <div id="new-major-container" class="space-y-2"><div class="text-xs text-gray-400">なし</div></div>
+    </div>
+    <div class="bg-amber-50 rounded-lg shadow border border-amber-200 p-4">
+      <h3 class="text-sm font-bold text-amber-800 mb-2 border-b border-amber-200 pb-1">定期部品交換</h3>
+      <div id="new-minor-container" class="space-y-2"><div class="text-xs text-gray-400">なし</div></div>
+    </div>
+  </div>
+</div>
+
+<div id="schedule-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+    <h3 class="text-lg font-bold mb-4 text-gray-800"><i class="fas fa-calendar-plus mr-2"></i>日程登録</h3>
+    <p class="text-sm text-gray-600 mb-4 font-bold" id="sched-modal-desc"></p>
+    <input type="hidden" id="sched-id">
+    <input type="hidden" id="sched-loc-hidden">
+    <input type="hidden" id="sched-eq-hidden">
+    <input type="hidden" id="sched-work-hidden">
+    <div class="mb-4">
+      <label class="block text-sm font-bold mb-1 text-gray-700">施工予定日</label>
+      <input type="date" id="sched-date" class="w-full border rounded p-2">
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm font-bold mb-1 text-slate-600">備考</label>
+      <textarea class="w-full border rounded p-2 text-sm" placeholder="業者名や見積状況など" id="sched-notes"></textarea>
+    </div>
+    <div class="flex justify-end space-x-2">
+      <button onclick="closeScheduleModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">キャンセル</button>
+      <button onclick="submitSchedule()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold shadow">確定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function progressInit(f=false) {
+  if(!f && window.g_cache.progress) { 
+    renderStatusBars(window.g_cache.progress); 
+    if(window.g_cache.newTargets) renderNewTargets(window.g_cache.newTargets); 
+    return; 
+  }
+  showLoading(true); 
+  google.script.run.withSuccessHandler(r => { 
+    window.g_cache.progress=r; 
+    renderStatusBars(r); 
+    google.script.run.withSuccessHandler(t => { 
+      window.g_cache.newTargets=t; 
+      renderNewTargets(t); 
+      showLoading(false); 
+    }).getExchangeTargetsForUI(); 
+  }).getAllActiveProjects();
+}
+
+function renderStatusBars(projects) {
+  const c = document.getElementById('progress-list-container'); c.innerHTML = '';
+  if(!projects || projects.length === 0) { 
+    c.innerHTML = '<div class="p-8 text-center text-gray-500">現在進行中の案件はありません</div>'; 
+    return; 
+  }
+  
+  const steps = { '見積依頼中': 1, '見積受領': 2, '発注済': 3, '日程確定': 4 };
+  projects.sort((a,b) => (steps[b.status]||0) - (steps[a.status]||0));
+  
+  projects.forEach(p => {
+    const s = steps[p.status]||0;
+    const w = (s/4)*100;
+    const color = s===4 ? 'bg-green-500' : 'bg-blue-500';
+    
+    let btn = '';
+    if(p.status==='見積依頼中') btn=`<button onclick="updateStatus('${p.id}','見積受領')" class="bg-indigo-500 text-white px-2 py-1 rounded text-xs hover:bg-indigo-600">受領へ</button>`;
+    else if(p.status==='見積受領') btn=`<button onclick="updateStatus('${p.id}','発注済')" class="bg-orange-500 text-white px-2 py-1 rounded text-xs hover:bg-orange-600">発注へ</button>`;
+    else if(p.status==='発注済') btn=`<button onclick="openScheduleModal('${p.id}','${p.locName}','${p.equipmentId}','${p.workType}')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700">日程登録</button>`;
+    else if(p.status==='日程確定') btn=`<button onclick="openCompleteModal('${p.id}','${p.rowNumber}','${p.date}','${p.workType}','${p.locName}','${p.equipmentName||p.equipmentId}')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700">完了報告</button>`;
+    
+    const div = document.createElement('div'); 
+    div.className="p-3 hover:bg-gray-50 grid grid-cols-12 gap-4 items-center";
+    div.innerHTML=`
+      <div class="col-span-4 pl-2">
+        <div class="font-bold text-gray-800 text-sm">${p.locName}</div>
+        <div class="text-xs text-gray-500">${p.workType} (${p.equipmentName||p.equipmentId})</div>
+        ${p.date ? `<div class="mt-1"><span class="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded">${p.date}</span></div>` : ''}
+      </div>
+      <div class="col-span-5 relative h-3 bg-gray-200 rounded-full overflow-hidden">
+        <div class="absolute top-0 left-0 h-full ${color}" style="width: ${w}%"></div>
+      </div>
+      <div class="col-span-3 text-right flex justify-end items-center gap-2">
+        ${btn}
+        <button onclick="deleteProject('${p.id}')" class="text-gray-400 hover:text-red-500 p-1 transition" title="案件を取り消す"><i class="fas fa-trash-alt"></i></button>
+      </div>`;
+    c.appendChild(div);
+  });
+}
+
+function renderNewTargets(list) {
+  const cL = document.getElementById('new-legal-container'); cL.innerHTML = '';
+  const cM = document.getElementById('new-major-container'); cM.innerHTML = '';
+  const cm = document.getElementById('new-minor-container'); cm.innerHTML = '';
+  
+  if(list.length===0) return;
+
+  list.forEach(i => {
+    let alert=i.subsidyAlert?`<div class="text-xs text-white bg-red-500 px-2 py-1 rounded font-bold mt-1 inline-block">${i.subsidyAlert}</div>`:'';
+    let memo=i.nextWorkMemo?`<div class="text-xs text-blue-600 mt-1"><i class="fas fa-sticky-note mr-1"></i>${i.nextWorkMemo}</div>`:'';
+    const div=document.createElement('div'); div.className="bg-white p-2 rounded shadow border hover:shadow-md transition text-sm";
+    
+    // 赤文字削除
+    div.innerHTML=`
+      <div class="flex justify-between items-start mb-1">
+        <div>
+          <div class="font-bold text-slate-800">${i.locName}</div>
+          <div class="text-xs text-slate-500">${i.equipmentName}</div>
+        </div>
+        <button onclick="directSchedule('${i.locCode}','${i.equipmentId}','${i.exchangeTargets}')" class="bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded text-xs"><i class="fas fa-plus"></i></button>
+      </div>
+      ${alert}${memo}`;
+    
+    // サーバー判定を信頼
+    if (i.category === '法定検査') {
+      cL.appendChild(div);
+    } else if (i.category === '本体更新' || i.category === '美観') {
+      cM.appendChild(div);
+    } else {
+      cm.appendChild(div);
+    }
+  });
+  
+  if(cL.innerHTML==='') cL.innerHTML='<div class="text-xs text-gray-400">なし</div>';
+  if(cM.innerHTML==='') cM.innerHTML='<div class="text-xs text-gray-400">なし</div>';
+  if(cm.innerHTML==='') cm.innerHTML='<div class="text-xs text-gray-400">なし</div>';
+}
+
+function updateStatus(id,st) { 
+  if(confirm('ステータスを更新しますか？')){ 
+    showLoading(true); 
+    google.script.run.withSuccessHandler(()=>{clearCache('progress');progressInit(true);}).updateProjectStatus(id,st); 
+  }
+}
+
+function deleteProject(id) { 
+  if(confirm('この案件を取り消しますか？\n（未完了のまま終了し、履歴に残します）')){ 
+    showLoading(true); 
+    google.script.run.withSuccessHandler(()=>{clearCache('progress');progressInit(true);}).cancelProject(id); 
+  }
+}
+
+function openScheduleModal(id,l,e,w) { 
+  document.getElementById('sched-id').value=id; 
+  document.getElementById('sched-date').value=''; 
+  document.getElementById('sched-notes').value=''; 
+  document.getElementById('sched-modal-desc').innerText=`${l} / ${e} - ${w}`; 
+  document.getElementById('schedule-modal').classList.remove('hidden'); 
+}
+
+function directSchedule(l,e,w) { 
+  document.getElementById('sched-id').value='DIRECT'; 
+  // hidden input に値をセット
+  document.getElementById('sched-loc-hidden').value=l; 
+  document.getElementById('sched-eq-hidden').value=e; 
+  document.getElementById('sched-work-hidden').value=w; 
+  
+  document.getElementById('sched-date').value=''; 
+  document.getElementById('sched-notes').value=''; 
+  document.getElementById('sched-modal-desc').innerText=`新規: ${l} - ${w}`; 
+  document.getElementById('schedule-modal').classList.remove('hidden'); 
+}
+
+function closeScheduleModal() { document.getElementById('schedule-modal').classList.add('hidden'); }
+
+function submitSchedule() {
+  const id=document.getElementById('sched-id').value, d=document.getElementById('sched-date').value, n=document.getElementById('sched-notes').value;
+  if(!d) return alert('日付を入力してください'); 
+  showLoading(true); 
+  closeScheduleModal();
+  const cb=()=>{clearCache('progress');progressInit(true);};
+  if(id==='DIRECT') google.script.run.withSuccessHandler(cb).createScheduleAndRecord(document.getElementById('sched-loc-hidden').value,document.getElementById('sched-eq-hidden').value,document.getElementById('sched-work-hidden').value,d,n);
+  else google.script.run.withSuccessHandler(cb).createScheduleAndRecord('','','',d,n,id);
+}
+</script>
