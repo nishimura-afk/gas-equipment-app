@@ -107,7 +107,9 @@ function createVendorBatchDrafts() {
 
     body += `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
 
-    GmailApp.createDraft(v.email || '', subject, body);
+    GmailApp.createDraft(v.email || '', subject, body, {
+      from: 'nishimura@selfix.jp'
+    });
     log.push(v.name);
   }
   return { message: `${log.join(', ')} の下書きを作成しました。` };
@@ -137,7 +139,9 @@ function createAlertDrafts() {
                  `・型式: ${item['spec'] || '不明'}\n\n` +
                  `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
     
-    GmailApp.createDraft('', subject, body);
+    GmailApp.createDraft('', subject, body, {
+      from: 'nishimura@selfix.jp'
+    });
     const uniqueId = Utilities.getUuid();
     scheduleSheet.appendRow([uniqueId, item['拠点コード'], item['設備ID'], workType, '', config.PROJECT_STATUS.ESTIMATE_REQ, '', '']);
     count++;
@@ -148,7 +152,9 @@ function createAlertDrafts() {
 function createSingleDraftAndProject(locName, locCode, eqName, eqId, workType, body) {
   const config = getConfig();
   const subject = `【見積依頼】見積り依頼の件`;
-  GmailApp.createDraft('', subject, body);
+  GmailApp.createDraft('', subject, body, {
+    from: 'nishimura@selfix.jp'
+  });
   
   const uniqueId = Utilities.getUuid();
   getSheet(config.SHEET_NAMES.SCHEDULE).appendRow([uniqueId, locCode, eqId, workType, '', config.PROJECT_STATUS.ESTIMATE_REQ, '', '']);

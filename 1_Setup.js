@@ -451,8 +451,10 @@ function createBulkOrderGmailDraft(equipmentId) {
     }
   }
   
-  // Gmailの下書きを作成（送信元はnishimura@selfix.jp、ただしGmailApp.createDraftでは送信元を指定できないため、署名に記載済み）
-  GmailApp.createDraft(vendorEmail || '', subject, body);
+  // Gmailの下書きを作成（送信元はnishimura@selfix.jp）
+  GmailApp.createDraft(vendorEmail || '', subject, body, {
+    from: 'nishimura@selfix.jp'
+  });
   
   return {
     success: true,
