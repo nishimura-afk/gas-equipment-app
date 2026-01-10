@@ -277,7 +277,7 @@ function getFirstAprilForNozzle(installDate) {
 
 /**
  * ノズルカバー交換の対象店舗を取得
- * 計量機を持つ全店舗が対象（計量機更新から1年未満は除外）
+ * PARTS-PUMP-1Yの前回実施日から次回4月を計算し、2026年4月が対象の店舗を返す
  */
 function getNozzleCoverTargetStores() {
   var config = getConfig();
@@ -310,19 +310,32 @@ function getNozzleCoverTargetStores() {
     
     if (!locCode || !locName) continue;
     
-    var isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01');
+    // 設備ID = "PARTS-PUMP-1Y" の行を検索
+    var isPartsPump1Y = (eqId === 'PARTS-PUMP-1Y');
     
-    if (isPump && installDate instanceof Date && !isNaN(installDate.getTime())) {
-      var firstApril = getFirstAprilForNozzle(installDate);
+    if (isPartsPump1Y && installDate instanceof Date && !isNaN(installDate.getTime())) {
+      // 前回実施日から次回4月を計算
+      // PARTS-PUMP-1Yは1年サイクルの季節設備
+      // 前回実施日から最初の4月を取得
+      var firstApril = getFirstApril(installDate);
       
-      if (targetApril >= firstApril) {
+      // 前回実施日が4月の場合、次回は1年後の4月
+      // 前回実施日が4月以外の場合、getFirstAprilが返す4月が次回（既に1年後）
+      var nextApril = firstApril;
+      if (installDate.getMonth() === 3) {
+        // 前回実施日が4月の場合、1年後の4月を計算
+        nextApril = new Date(firstApril.getFullYear() + 1, 3, 1);
+      }
+      
+      // 実施予定の4月が対象年の4月である店舗を抽出
+      if (nextApril.getFullYear() === targetYear && nextApril.getMonth() === 3) {
         // 店舗コードをキーにして重複を防ぐ
         if (!storeMap[locCode]) {
           storeMap[locCode] = {
             code: locCode,
             name: locName,
             installDate: installDate,
-            firstApril: firstApril
+            nextApril: nextApril
           };
         }
       }
