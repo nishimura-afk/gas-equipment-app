@@ -316,15 +316,21 @@ function getNozzleCoverTargetStores() {
     if (isPartsPump1Y && installDate instanceof Date && !isNaN(installDate.getTime())) {
       // 前回実施日から次回4月を計算
       // PARTS-PUMP-1Yは1年サイクルの季節設備
-      // 前回実施日から最初の4月を取得
-      var firstApril = getFirstApril(installDate);
+      var installYear = installDate.getFullYear();
+      var installMonth = installDate.getMonth() + 1; // 1-12
       
-      // 前回実施日が4月の場合、次回は1年後の4月
-      // 前回実施日が4月以外の場合、getFirstAprilが返す4月が次回（既に1年後）
-      var nextApril = firstApril;
-      if (installDate.getMonth() === 3) {
-        // 前回実施日が4月の場合、1年後の4月を計算
-        nextApril = new Date(firstApril.getFullYear() + 1, 3, 1);
+      var nextApril;
+      // 前回実施日が4月以前（1-4月）の場合：同年の4月が次回
+      // 前回実施日が5月以降（5-12月）の場合：翌年の4月が次回
+      if (installMonth <= 4) {
+        nextApril = new Date(installYear, 3, 1); // 同年の4月
+      } else {
+        nextApril = new Date(installYear + 1, 3, 1); // 翌年の4月
+      }
+      
+      // 計算した次回4月が既に過ぎている場合は、さらに1年後の4月を計算
+      if (nextApril < today) {
+        nextApril = new Date(nextApril.getFullYear() + 1, 3, 1);
       }
       
       // 実施予定の4月が対象年の4月である店舗を抽出
