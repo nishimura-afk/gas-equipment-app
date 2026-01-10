@@ -6,7 +6,7 @@
  * - 釣銭機カバーをseasonal: falseに修正
  */
 function getConfig() {
-  const SPREADSHEET_ID = '1XXkC-3tU6iSzRgx4Ex1vKRCx5VrevBkZe6CCZQt5LAE';
+  const SPREADSHEET_ID = '1FKMS0xNHEcftYmZ2u1Q2VrAtPKnKm5E5dG1tnlR6fo';
   
   // システム管理者（エラー通知やCC用）
   const ADMIN_MAIL = 'nishimura@selfix.jp'; 
