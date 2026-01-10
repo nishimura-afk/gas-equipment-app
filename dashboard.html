@@ -278,9 +278,11 @@ function loadAllBulkOrderAlerts() {
               el.textContent = info.targetCount;
             });
             
+            // 実施予定年度を表示（1月〜3月は今年、4月以降は来年）
             const years = alertBox.querySelectorAll('.bulk-target-year');
+            const targetYear = info.targetYear || new Date().getFullYear();
             years.forEach(function(el) {
-              el.textContent = new Date().getFullYear();
+              el.textContent = targetYear;
             });
           }
         }
@@ -319,6 +321,9 @@ function showBulkOrderDraft(equipmentId) {
         <button onclick="copyBulkEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
           <i class="fas fa-copy mr-2"></i>コピー
         </button>
+        <button onclick="createBulkOrderProjectFromDraft('${equipmentId}')" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-clipboard-list mr-2"></i>案件を作成
+        </button>
         <button onclick="closeBulkModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
           <i class="fas fa-times mr-2"></i>閉じる
         </button>
@@ -329,6 +334,7 @@ function showBulkOrderDraft(equipmentId) {
   modal.appendChild(content);
   document.body.appendChild(modal);
   window.currentBulkModal = modal;
+  window.currentBulkEquipmentId = equipmentId; // モーダルから案件作成できるように保存
   
   modal.onclick = function(e) {
     if (e.target === modal) closeBulkModal();
@@ -354,7 +360,17 @@ function closeBulkModal() {
   if (window.currentBulkModal) {
     document.body.removeChild(window.currentBulkModal);
     window.currentBulkModal = null;
+    window.currentBulkEquipmentId = null;
   }
+}
+
+// メール下書きから直接案件を作成
+function createBulkOrderProjectFromDraft(equipmentId) {
+  if (!equipmentId && window.currentBulkEquipmentId) {
+    equipmentId = window.currentBulkEquipmentId;
+  }
+  closeBulkModal();
+  createBulkOrderProjectFor(equipmentId);
 }
 
 // 案件を作成
@@ -366,9 +382,9 @@ function createBulkOrderProjectFor(equipmentId) {
   
   const info = window.bulkOrderDataMap[equipmentId];
   const targetCount = info.targetCount;
-  const year = new Date().getFullYear();
+  const targetYear = info.targetYear || new Date().getFullYear();
   
-  if (!confirm(`${year}年度の${info.config.name}一括発注案件を作成しますか？\n\n対象店舗: ${targetCount}店舗\n発注先: ${info.config.vendor}`)) {
+  if (!confirm(`${targetYear}年度の${info.config.name}一括発注案件を作成しますか？\n\n対象店舗: ${targetCount}店舗\n実施予定: ${targetYear}年4月\n発注先: ${info.config.vendor}`)) {
     return;
   }
   

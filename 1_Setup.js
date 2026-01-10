@@ -282,9 +282,11 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
   
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
-  var currentDay = today.getDate();
+  var currentYear = today.getFullYear();
   
-  if (currentMonth === 1 && currentDay < 5) return [];
+  // 1月から3月は今年4月、4月以降は来年4月を実施予定とする
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  var targetApril = new Date(targetYear, 3, 1); // 4月1日
   
   var storeMap = {};
   
@@ -305,15 +307,20 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
       var baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
       
       var firstApril = getFirstApril(baseDate);
-      var yearsSinceFirstApril = getYearsDiff(firstApril, today);
+      // 実施予定の4月時点で、cycleYears年以上経過している店舗を抽出
+      var yearsUntilTargetApril = getYearsDiff(firstApril, targetApril);
       
-      if (yearsSinceFirstApril >= cycleYears && !storeMap[locCode]) {
+      // 今年または来年の4月までに、cycleYears年以上経過する予定の店舗を抽出
+      if (yearsUntilTargetApril >= cycleYears && !storeMap[locCode]) {
+        var yearsSinceFirstApril = getYearsDiff(firstApril, today);
         storeMap[locCode] = {
           code: locCode,
           name: locName,
           lastDate: baseDate,
           firstApril: firstApril,
           yearsSinceFirstApril: yearsSinceFirstApril,
+          yearsUntilTargetApril: yearsUntilTargetApril,
+          targetApril: targetApril,
           hasHistory: (partADate instanceof Date && !isNaN(partADate.getTime()))
         };
       }
@@ -335,14 +342,21 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
 /**
  * 一括発注メール下書き作成（汎用）
  */
-function createBulkOrderDraftEmail(configItem, targetStores) {
+function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
   if (targetStores.length === 0) return '現在、発注対象の店舗はありません。';
   
-  var today = new Date();
-  var year = today.getFullYear();
-  var body = '件名: 【' + year + '年度】' + configItem.name + ' 発注のご依頼\n\n';
+  // targetYearが指定されていない場合は、現在の日付から計算
+  if (!targetYear) {
+    var today = new Date();
+    var currentMonth = today.getMonth() + 1;
+    var currentYear = today.getFullYear();
+    targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  }
+  var fiscalYear = targetYear; // 実施年度
+  
+  var body = '件名: 【' + fiscalYear + '年度】' + configItem.name + ' 発注のご依頼\n\n';
   body += 'お世話になっております。\n\n';
-  body += year + '年度の' + configItem.name + 'の発注をお願いいたします。\n\n';
+  body += fiscalYear + '年度の' + configItem.name + 'の発注をお願いいたします。\n\n';
   body += '【対象店舗: ' + targetStores.length + '店舗】\n';
   
   for (var i = 0; i < targetStores.length; i++) {
@@ -352,7 +366,7 @@ function createBulkOrderDraftEmail(configItem, targetStores) {
     body += '- ' + store.name + '（前回: ' + lastYear + '年' + lastMonth + '月）\n';
   }
   
-  body += '\n【実施予定】\n' + year + '年4月\n\n';
+  body += '\n【実施予定】\n' + targetYear + '年4月\n\n';
   body += '【発注先】\n' + configItem.vendor + '\n\n';
   body += 'よろしくお願いいたします。\n';
   return body;
@@ -364,18 +378,23 @@ function createBulkOrderDraftEmail(configItem, targetStores) {
 function getAllBulkOrderInfo() {
   var configs = getBulkOrderConfigs();
   var results = [];
+  var today = new Date();
+  var currentMonth = today.getMonth() + 1;
+  var currentYear = today.getFullYear();
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
   
   for (var i = 0; i < configs.length; i++) {
     var cfg = configs[i];
     var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
-    var emailDraft = createBulkOrderDraftEmail(cfg, targetStores);
+    var emailDraft = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
     
     results.push({
       config: cfg,
       hasAlert: targetStores.length > 0,
       targetCount: targetStores.length,
       targetStores: targetStores,
-      emailDraft: emailDraft
+      emailDraft: emailDraft,
+      targetYear: targetYear // 実施予定年度を追加
     });
   }
   
@@ -406,9 +425,12 @@ function createBulkOrderProject(equipmentId) {
   if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
   
   var today = new Date();
-  var year = today.getFullYear();
-  var scheduledDate = new Date(year, 3, 1);
-  var projectId = cfg.id.replace(/[^A-Z0-9]/g, '') + '-' + year + '-' + Utilities.formatDate(new Date(), 'JST', 'MMddHHmmss');
+  var currentMonth = today.getMonth() + 1;
+  var currentYear = today.getFullYear();
+  // 1月から3月は今年4月、4月以降は来年4月を実施予定とする
+  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+  var scheduledDate = new Date(targetYear, 3, 1); // 4月1日
+  var projectId = cfg.id.replace(/[^A-Z0-9]/g, '') + '-' + targetYear + '-' + Utilities.formatDate(new Date(), 'JST', 'MMddHHmmss');
   
   var newRow = [
     projectId,
