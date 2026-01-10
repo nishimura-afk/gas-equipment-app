@@ -346,27 +346,32 @@ function loadAllBulkOrderAlerts() {
 
 // ノズルカバー交換アラートを読み込んで表示
 function loadNozzleCoverAlert() {
-  console.log('loadNozzleCoverAlert 開始');
+  console.log('=== loadNozzleCoverAlert 開始 ===');
   
   google.script.run
     .withSuccessHandler(function(info) {
       console.log('getNozzleCoverInfo 成功:', info);
+      
+      if (!info) {
+        console.error('info が null です');
+        return;
+      }
+      
       console.log('hasAlert:', info.hasAlert);
       console.log('targetCount:', info.targetCount);
       
-      // bulk-order-alertsに直接表示する（nozzle-cover-alert要素は使わない）
       const container = document.getElementById('bulk-order-alerts');
       if (!container) {
         console.error('bulk-order-alerts 要素が見つかりません');
         return;
       }
       
-      // 既存のコンテンツをクリア
+      // 既存の「読み込み中...」をクリア
       container.innerHTML = '';
       
       if (!info.hasAlert || info.targetCount === 0) {
         console.log('アラートなし: 対象店舗が0件');
-        // 他の一括発注アラートがあるかもしれないので、ここでは何も表示しない
+        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
         return;
       }
       
@@ -389,13 +394,10 @@ function loadNozzleCoverAlert() {
           <div class="flex-1">
             <div class="text-base font-bold text-blue-900 mb-1">
               <span class="text-xl mr-2">${info.config.emoji}</span>
-              ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗（全店）
+              ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
             </div>
             <div class="text-sm text-blue-700 ml-7 mt-1">
               対象: ${storeList}
-            </div>
-            <div class="text-xs text-amber-600 ml-7 mt-1">
-              ※計量機更新から1年未満の店舗は除外
             </div>
           </div>
         </div>
@@ -412,15 +414,17 @@ function loadNozzleCoverAlert() {
         </div>
       `;
       
-      // 最上部に追加
       container.insertBefore(div, container.firstChild);
-      
-      // グローバルに保存
       window.nozzleCoverData = info;
+      
+      console.log('=== 表示完了 ===');
     })
     .withFailureHandler(function(error) {
       console.error('ノズルカバー情報の取得に失敗:', error);
-      alert('ノズルカバー情報の取得に失敗しました: ' + error.message);
+      const container = document.getElementById('bulk-order-alerts');
+      if (container) {
+        container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">読み込みに失敗しました: ' + error.message + '</div>';
+      }
     })
     .getNozzleCoverInfo();
 }
