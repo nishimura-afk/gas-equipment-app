@@ -1,6 +1,6 @@
 /**
- * Code.gs v7.4
- * V3ロジック：日付の文字列化対応・強制表示
+ * Code.gs v7.5
+ * 本番運用版
  */
 function doGet() {
   console.log('doGet START v7.4');
@@ -134,7 +134,7 @@ function generateQuoteRequest(locName, eqName, workType) {
 }
 
 // =================================================================
-// ★4月実施一括発注ロジック V3 (日付文字列化対応)★
+// 4月実施一括発注ロジック
 // =================================================================
 
 function getBulkOrderConfigs() {
@@ -209,23 +209,13 @@ function createNozzleCoverDraftEmail(targetStores) {
   return body;
 }
 
-function getNozzleCoverInfoV3() {
+function getNozzleCoverInfo() {
   try {
     var targetStores = getNozzleCoverTargetStores();
     var today = new Date();
     var currentMonth = today.getMonth() + 1;
     var currentYear = today.getFullYear();
     var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-    
-    // ★強制表示ロジック★
-    if (targetStores.length === 0) {
-      targetStores.push({
-        code: 'TEST-001',
-        name: '【強制表示】対象店舗なし（テスト）',
-        installDate: new Date(),
-        targetYear: targetYear
-      });
-    }
 
     var emailDraft = createNozzleCoverDraftEmail(targetStores);
     
@@ -239,12 +229,11 @@ function getNozzleCoverInfoV3() {
 
     return {
       config: { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー交換', emoji: '📦', vendor: 'タツノ' },
-      hasAlert: true,
+      hasAlert: safeStores.length > 0,
       targetCount: safeStores.length,
       targetStores: safeStores,
       emailDraft: emailDraft,
-      targetYear: targetYear,
-      _debug: 'SUCCESS_V3'
+      targetYear: targetYear
     };
   } catch (e) {
     return { hasAlert: false, error: e.toString() };
@@ -310,7 +299,7 @@ function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
   return body;
 }
 
-function getAllBulkOrderInfoV3() {
+function getAllBulkOrderInfo() {
   try {
     var configs = getBulkOrderConfigs();
     var results = [];
@@ -321,16 +310,11 @@ function getAllBulkOrderInfoV3() {
       var cfg = configs[i];
       if (cfg.id === 'PARTS-PUMP-1Y') continue; 
       var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
-      var emailDraft = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
       
-      // ★強制表示ロジック★
-      if (targetStores.length === 0) {
-        targetStores.push({
-          code: 'TEST-999', name: '【強制表示】テスト店舗', 
-          equipmentName: 'テスト機', lastDate: new Date(),
-          diffYears: 99
-        });
-      }
+      // 対象がない場合はスキップ
+      if (targetStores.length === 0) continue;
+      
+      var emailDraft = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
 
       // 日付の安全化
       var safeStores = targetStores.map(s => ({
@@ -353,18 +337,3 @@ function getAllBulkOrderInfoV3() {
     return [];
   }
 }
-
-// ダミー関数 (V2呼び出しもV3へ)
-function getNozzleCoverInfo() { return getNozzleCoverInfoV3(); }
-function getAllBulkOrderInfo() { return getAllBulkOrderInfoV3(); }
-function getNozzleCoverInfoV2() { return getNozzleCoverInfoV3(); }
-function getAllBulkOrderInfoV2() { return getAllBulkOrderInfoV3(); }
-function createNozzleCoverGmailDraft() { return {success:true}; }
-function createNozzleCoverProject() { return {success:true}; }
-function createBulkOrderGmailDraft() { return {success:true}; }
-function createBulkOrderProject() { return {success:true}; }
-function checkAndSendAlertMail() {}
-function runDailyBackup() {}
-function setupSystemTriggers() {}
-function importEquipmentData() {}
-function getStoreList() { return []; }
