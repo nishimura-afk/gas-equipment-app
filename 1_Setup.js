@@ -1,6 +1,6 @@
 /**
- * 1_Setup.gs v6.6
- * 4月実施一括発注対応（5種類）完全版
+ * 1_Setup.gs v7.0
+ * 4月実施一括発注対応（5種類）完全版 - Fiscal Year Fixed
  */
 function initialSetup() {
   const config = getConfig();
@@ -14,7 +14,6 @@ function initialSetup() {
     { name: config.SHEET_NAMES.STATUS_SUMMARY, headers: ['拠点コード', '拠点名', '設備ID', '設備名', 'カテゴリ', '設置日(前回実施)', '部品Aステータス', '部品Bステータス', '本体ステータス', '部品B対象', 'monthDiffA', 'subsidyAlert', 'nextWorkMemo', 'spec', '次回予定日'] },
     { name: config.SHEET_NAMES.SYS_LOG, headers: ['タイムスタンプ', 'ユーザー', '操作種別', '詳細', 'ステータス'] },
     { name: config.SHEET_NAMES.CONFIG_MASTER, headers: ['設定キー', '分類', '設備名(表示用)', '基準年数', '検索キーワード(取込用)', 'ID接尾辞'] },
-    // ★ここに追加
     { name: config.SHEET_NAMES.ESTIMATE_HEADER, headers: ['見積ID', '案件ID', '拠点コード', '拠点名', '設備ID', '設備名', '業者名', '見積日', '総額(税抜)', '消費税', '総額(税込)', '諸経費', 'PDFファイル名', 'PDFリンク', '登録日'] },
     { name: config.SHEET_NAMES.ESTIMATE_DETAIL, headers: ['見積ID', '行番号', '項目名', '単価', '数量', '単位', '小計', '備考'] }
   ];
@@ -166,19 +165,8 @@ function calcStatusRow(installDate, partADate, partBDate, eqName, eqId, cycles, 
     else if (c.category === '部材交換' || c.category === '部材更新' || c.category === 'メンテ') {
       
       if (c.seasonal) {
-        const lastDate = isValidDate(partADate) ? partADate : installDate;
-        const yearsPassed = getYearsDiff(lastDate, today);
-        const yearsToNext = c.years - yearsPassed;
-        const currentMonth = today.getMonth() + 1;
-        
-        if (yearsPassed >= c.years) {
-          partA = status.PREPARE;
-        }
-        else if (yearsToNext > 0 && yearsToNext < thresholds.SEASONAL_NOTICE && currentMonth >= 1) {
-          partA = status.NOTICE;
-        }
-      } 
-      else {
+        // 季節性は別途判定
+      } else {
         if (yearsA >= c.years + thresholds.PARTS_PREPARE) {
           partA = status.PREPARE;
         } else if (yearsA >= c.years - thresholds.PARTS_NOTICE) {
@@ -238,9 +226,6 @@ function getYearsDiff(d1, d2) {
  * ====================================================================
  */
 
-/**
- * 4月実施一括発注の設備設定
- */
 function getBulkOrderConfigs() {
   return [
     { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー', cycle: 1, vendor: 'タツノ', emoji: '📦', searchKey: 'ノズルカバー' },
@@ -252,35 +237,20 @@ function getBulkOrderConfigs() {
 }
 
 /**
- * 設置日から最初の4月を計算
+ * 年度判定ユーティリティ
+ * 指定日が属する年度（Fiscal Year）を返す
+ * 例: 2022年3月 -> FY2021, 2022年4月 -> FY2022
  */
-function getFirstApril(installDate) {
-  var firstApril = new Date(installDate.getFullYear(), 3, 1);
-  if (installDate.getMonth() >= 3) {
-    firstApril.setFullYear(firstApril.getFullYear() + 1);
-  }
-  return firstApril;
+function getFiscalYear(date) {
+  if (!date || isNaN(date.getTime())) return 0;
+  return (date.getMonth() < 3) ? date.getFullYear() - 1 : date.getFullYear();
 }
 
 /**
- * ノズルカバー交換用: 設置日から実施可能な最初の4月を計算
- * 計量機更新後、2回目の4月を返す（更新後1回目の4月はスキップ）
- */
-function getFirstAprilForNozzle(installDate) {
-  var year = installDate.getFullYear();
-  var month = installDate.getMonth(); // 0-11
-  
-  // 設置が1月〜3月なら翌年の4月、4月〜12月なら翌々年の4月（2回目の4月）
-  var firstAprilYear = (month < 3) ? year + 1 : year + 2;
-  return new Date(firstAprilYear, 3, 1); // 4月1日
-}
-
-/**
- * ノズルカバー交換の対象店舗を取得
- * 各店舗について、PARTS-PUMP-1Y、PUMP-G-01、PUMP-K-01の日付のうち
- * 最も新しい日付を「最終実施日」として、そこから次回4月を計算
+ * ノズルカバー対象店舗を取得
  */
 function getNozzleCoverTargetStores() {
+  Logger.log('-> Searching Nozzle Cover Targets...');
   var config = getConfig();
   var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
   var masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
@@ -289,18 +259,15 @@ function getNozzleCoverTargetStores() {
   if (masterValues.length <= 1) return [];
   
   var col = {};
-  for (var i = 0; i < masterValues[0].length; i++) {
-    col[masterValues[0][i]] = i;
-  }
+  for (var i = 0; i < masterValues[0].length; i++) { col[masterValues[0][i]] = i; }
   
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
   
+  // 1-3月なら今年度(同年)の4月ではなく、次の4月(同年)をターゲット。
   var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  var targetApril = new Date(targetYear, 3, 1);
   
-  // 店舗ごとに日付を収集
   var storeDates = {};
   
   for (var i = 1; i < masterValues.length; i++) {
@@ -312,172 +279,87 @@ function getNozzleCoverTargetStores() {
     
     if (!locCode || !locName) continue;
     
-    // 店舗情報を初期化
     if (!storeDates[locCode]) {
-      storeDates[locCode] = {
-        code: locCode,
-        name: locName,
-        partsPump1YDate: null,
-        pumpG01Date: null,
-        pumpK01Date: null
-      };
+      storeDates[locCode] = { code: locCode, name: locName, dates: [] };
     }
     
-    // PARTS-PUMP-1Y、PUMP-G-01、PUMP-K-01の日付を収集
-    // 複数の設備がある場合は、最も新しい日付を保持
-    // 未来の日付（today より後）は除外
     if (installDate instanceof Date && !isNaN(installDate.getTime()) && installDate <= today) {
-      if (eqId === 'PARTS-PUMP-1Y') {
-        if (!storeDates[locCode].partsPump1YDate || installDate > storeDates[locCode].partsPump1YDate) {
-          storeDates[locCode].partsPump1YDate = installDate;
-        }
-      } else if (eqId.includes('PUMP-G-01')) {
-        if (!storeDates[locCode].pumpG01Date || installDate > storeDates[locCode].pumpG01Date) {
-          storeDates[locCode].pumpG01Date = installDate;
-        }
-      } else if (eqId.includes('PUMP-K-01')) {
-        if (!storeDates[locCode].pumpK01Date || installDate > storeDates[locCode].pumpK01Date) {
-          storeDates[locCode].pumpK01Date = installDate;
-        }
+      if (eqId === 'PARTS-PUMP-1Y' || eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01')) {
+        storeDates[locCode].dates.push(installDate);
       }
     }
   }
   
   var result = [];
   
-  // 各店舗について、最も新しい日付を「最終実施日」として使用
   for (var locCode in storeDates) {
     var store = storeDates[locCode];
+    if (store.dates.length === 0) continue;
     
-    // 3つの日付のうち最も新しい日付を見つける
-    // 未来の日付（today より後）は除外
-    var latestDate = null;
-    var dates = [
-      store.partsPump1YDate,
-      store.pumpG01Date,
-      store.pumpK01Date
-    ];
+    var latestDate = new Date(Math.max.apply(null, store.dates));
     
-    for (var j = 0; j < dates.length; j++) {
-      var date = dates[j];
-      if (date instanceof Date && !isNaN(date.getTime()) && date <= today) {
-        if (!latestDate || date > latestDate) {
-          latestDate = date;
-        }
-      }
-    }
+    // FYベースで次回実施年を計算
+    var nextDueYear = getFiscalYear(latestDate) + 1;
     
-    // 有効な日付が存在しない場合はスキップ
-    if (!latestDate) continue;
-    
-    // 最終実施日から次回4月を計算
-    // PARTS-PUMP-1Yは1年サイクルの季節設備
-    var installYear = latestDate.getFullYear();
-    var installMonth = latestDate.getMonth() + 1; // 1-12
-    
-    var nextApril;
-    // 最終実施日が4月以前（1-4月）の場合：同年の4月が次回
-    // 最終実施日が5月以降（5-12月）の場合：翌年の4月が次回
-    if (installMonth <= 4) {
-      nextApril = new Date(installYear, 3, 1); // 同年の4月
-    } else {
-      nextApril = new Date(installYear + 1, 3, 1); // 翌年の4月
-    }
-    
-    // 計算した次回4月が既に過ぎている場合は、さらに1年後の4月を計算
-    if (nextApril < today) {
-      nextApril = new Date(nextApril.getFullYear() + 1, 3, 1);
-    }
-    
-    // 実施予定の4月が対象年の4月である店舗を抽出
-    if (nextApril.getFullYear() === targetYear && nextApril.getMonth() === 3) {
+    if (nextDueYear <= targetYear) {
       result.push({
         code: store.code,
         name: store.name,
         installDate: latestDate,
-        nextApril: nextApril
+        targetYear: targetYear
       });
     }
   }
   
-  result.sort(function(a, b) {
-    return a.code > b.code ? 1 : -1;
-  });
-  
+  result.sort(function(a, b) { return a.code > b.code ? 1 : -1; });
   return result;
 }
 
-/**
- * ノズルカバー交換メール下書き作成
- */
 function createNozzleCoverDraftEmail(targetStores) {
   if (targetStores.length === 0) return '現在、発注対象の店舗はありません。';
-  
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var fiscalYear = (currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1;
   
-  var body = '';
-  body += 'お世話になっております。\n\n';
-  body += fiscalYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n';
-  body += '【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
-  
-  for (var i = 0; i < targetStores.length; i++) {
-    var store = targetStores[i];
-    body += '- ' + store.name + '\n';
-  }
-  
-  body += '\n【実施予定】\n' + fiscalYear + '年4月\n\n';
-  body += '【発注先】\nタツノ\n\n';
-  body += 'よろしくお願いいたします。\n\n';
-  body += '--------------------------------------------------\n';
-  body += '日商有田株式会社\n';
-  body += 'nishimura@selfix.jp\n';
-  body += '--------------------------------------------------';
-  
+  var body = 'お世話になっております。\n\n' + fiscalYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
+  for (var i = 0; i < targetStores.length; i++) { body += '- ' + targetStores[i].name + '\n'; }
+  body += '\n【実施予定】\n' + fiscalYear + '年4月\n\n【発注先】\nタツノ\n\nよろしくお願いいたします。\n\n--------------------------------------------------\n日商有田株式会社\nnishimura@selfix.jp\n--------------------------------------------------';
   return body;
 }
 
 /**
- * ノズルカバー一括発注情報を取得（ダッシュボード表示用）
+ * ノズルカバー一括発注情報を取得
  */
 function getNozzleCoverInfo() {
-  Logger.log('=== getNozzleCoverInfo 開始 ===');
-  
-  var targetStores = getNozzleCoverTargetStores();
-  Logger.log('targetStores.length: ' + targetStores.length);
-  Logger.log('targetStores: ' + JSON.stringify(targetStores));
-  
-  var emailDraft = createNozzleCoverDraftEmail(targetStores);
-  
-  var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  
-  Logger.log('targetYear: ' + targetYear);
-  Logger.log('hasAlert: ' + (targetStores.length > 0));
-  
-  return {
-    config: {
-      id: 'PARTS-PUMP-1Y',
-      name: 'ノズルカバー交換',
-      emoji: '📦',
-      vendor: 'タツノ'
-    },
-    hasAlert: targetStores.length > 0,
-    targetCount: targetStores.length,
-    targetStores: targetStores,
-    emailDraft: emailDraft,
-    targetYear: targetYear
-  };
+  Logger.log('=== getNozzleCoverInfo START ===');
+  try {
+    var targetStores = getNozzleCoverTargetStores();
+    Logger.log('Found Stores: ' + targetStores.length);
+    
+    var today = new Date();
+    var currentMonth = today.getMonth() + 1;
+    var currentYear = today.getFullYear();
+    var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
+    
+    return {
+      config: { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー交換', emoji: '📦', vendor: 'タツノ' },
+      hasAlert: targetStores.length > 0,
+      targetCount: targetStores.length,
+      targetStores: targetStores,
+      emailDraft: createNozzleCoverDraftEmail(targetStores),
+      targetYear: targetYear
+    };
+  } catch (e) {
+    Logger.log('ERROR in getNozzleCoverInfo: ' + e.toString());
+    return { hasAlert: false, error: e.toString() };
+  }
 }
 
 /**
- * 一括発注対象店舗を取得（汎用）
+ * 一括発注対象店舗を取得（汎用・年度基準）
  */
 function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
+  Logger.log('-> BulkSearch: ' + equipmentId + ' (Cycle:' + cycleYears + ')');
   var config = getConfig();
   var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
   var masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
@@ -486,17 +368,12 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
   if (masterValues.length <= 1) return [];
   
   var col = {};
-  for (var i = 0; i < masterValues[0].length; i++) {
-    col[masterValues[0][i]] = i;
-  }
+  for (var i = 0; i < masterValues[0].length; i++) { col[masterValues[0][i]] = i; }
   
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
-  
-  // 1月から3月は今年4月、4月以降は来年4月を実施予定とする
   var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  var targetApril = new Date(targetYear, 3, 1); // 4月1日
   
   var storeMap = {};
   
@@ -516,83 +393,40 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
     if (isMatch && installDate instanceof Date && !isNaN(installDate.getTime())) {
       var baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
       
-      var firstApril = getFirstApril(baseDate);
-      // 実施予定の4月時点で、cycleYears年以上経過している店舗を抽出
-      var yearsUntilTargetApril = getYearsDiff(firstApril, targetApril);
+      var installFY = getFiscalYear(baseDate);
+      var targetFY = targetYear;
+      var diffYears = targetFY - installFY;
       
-      // 今年または来年の4月までに、cycleYears年以上経過する予定の店舗を抽出
-      if (yearsUntilTargetApril >= cycleYears && !storeMap[locCode]) {
-        var yearsSinceFirstApril = getYearsDiff(firstApril, today);
+      if (diffYears >= cycleYears && !storeMap[locCode]) {
         storeMap[locCode] = {
           code: locCode,
           name: locName,
-          equipmentName: eqName, // 設備名を追加
+          equipmentName: eqName,
           lastDate: baseDate,
-          firstApril: firstApril,
-          yearsSinceFirstApril: yearsSinceFirstApril,
-          yearsUntilTargetApril: yearsUntilTargetApril,
-          targetApril: targetApril,
-          hasHistory: (partADate instanceof Date && !isNaN(partADate.getTime()))
+          lastFY: installFY,
+          targetFY: targetFY,
+          diffYears: diffYears
         };
       }
     }
   }
   
   var result = [];
-  for (var key in storeMap) {
-    result.push(storeMap[key]);
-  }
-  
-  result.sort(function(a, b) {
-    return a.code > b.code ? 1 : -1;
-  });
-  
+  for (var key in storeMap) { result.push(storeMap[key]); }
+  result.sort(function(a, b) { return a.code > b.code ? 1 : -1; });
   return result;
 }
 
-/**
- * 一括発注メール下書き作成（汎用）
- */
 function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
-  if (targetStores.length === 0) return '現在、発注対象の店舗はありません。';
-  
-  // targetYearが指定されていない場合は、現在の日付から計算
-  if (!targetYear) {
-    var today = new Date();
-    var currentMonth = today.getMonth() + 1;
-    var currentYear = today.getFullYear();
-    targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  }
-  var fiscalYear = targetYear; // 実施年度
-  
-  // 計量器設備かどうかを判定（PARTS-PUMP-1Y, PARTS-PUMP-4Y は計量器）
-  var isMeasuringEquipment = (configItem.id === 'PARTS-PUMP-1Y' || configItem.id === 'PARTS-PUMP-4Y');
-  
-  var body = '';
-  body += 'お世話になっております。\n\n';
-  body += fiscalYear + '年度の' + configItem.name + 'の発注をお願いいたします。\n\n';
-  body += '【対象店舗: ' + targetStores.length + '店舗】\n';
-  
+  if (targetStores.length === 0) return '対象なし';
+  var fiscalYear = targetYear || ((new Date().getMonth() < 3) ? new Date().getFullYear() : new Date().getFullYear() + 1);
+  var body = 'お世話になっております。\n\n' + fiscalYear + '年度の' + configItem.name + 'の発注をお願いいたします。\n\n【対象店舗: ' + targetStores.length + '店舗】\n';
   for (var i = 0; i < targetStores.length; i++) {
-    var store = targetStores[i];
-    var lastYear = store.lastDate.getFullYear();
-    var lastMonth = store.lastDate.getMonth() + 1;
-    body += '- ' + store.name + '（前回: ' + lastYear + '年' + lastMonth + '月）';
-    
-    // 計量器設備の場合、設備名を記載（型式・仕様は記載しない）
-    if (isMeasuringEquipment && store.equipmentName) {
-      body += '\n  ' + store.equipmentName;
-    }
-    body += '\n';
+    var s = targetStores[i];
+    body += '- ' + s.name + ' (前回: ' + s.lastDate.getFullYear() + '年' + (s.lastDate.getMonth()+1) + '月)\n';
+    if ((configItem.id.includes('PUMP')) && s.equipmentName) body += '  ' + s.equipmentName + '\n';
   }
-  
-  body += '\n【実施予定】\n' + targetYear + '年4月\n\n';
-  body += '【発注先】\n' + configItem.vendor + '\n\n';
-  body += 'よろしくお願いいたします。\n\n';
-  body += '--------------------------------------------------\n';
-  body += '日商有田株式会社\n';
-  body += 'nishimura@selfix.jp\n';
-  body += '--------------------------------------------------';
+  body += '\n【実施予定】\n' + fiscalYear + '年4月\n\n【発注先】\n' + configItem.vendor + '\n\nよろしくお願いいたします。\n\n--------------------------------------------------\n日商有田株式会社\nnishimura@selfix.jp\n--------------------------------------------------';
   return body;
 }
 
@@ -600,221 +434,103 @@ function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
  * 全ての一括発注情報を取得
  */
 function getAllBulkOrderInfo() {
-  var configs = getBulkOrderConfigs();
-  var results = [];
-  var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  
-  for (var i = 0; i < configs.length; i++) {
-    var cfg = configs[i];
-    var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
-    var emailDraft = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
+  Logger.log('=== getAllBulkOrderInfo START ===');
+  try {
+    var configs = getBulkOrderConfigs();
+    var results = [];
+    var today = new Date();
+    var targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
     
-    results.push({
-      config: cfg,
-      hasAlert: targetStores.length > 0,
-      targetCount: targetStores.length,
-      targetStores: targetStores,
-      emailDraft: emailDraft,
-      targetYear: targetYear // 実施予定年度を追加
-    });
-  }
-  
-  return results;
-}
-
-/**
- * ノズルカバー交換Gmail下書き作成
- */
-function createNozzleCoverGmailDraft() {
-  var config = getConfig();
-  var targetStores = getNozzleCoverTargetStores();
-  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
-  
-  var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  
-  var body = createNozzleCoverDraftEmail(targetStores);
-  var subject = '【' + targetYear + '年度】ノズルカバー交換 発注のご依頼';
-  
-  // ベンダーのメールアドレスを取得
-  var vendorEmail = '';
-  for (var key in config.VENDORS) {
-    var vendorName = config.VENDORS[key].name;
-    if (vendorName.includes('タツノ') || 'タツノ'.includes(vendorName.replace('株式会社', '').replace('有限会社', ''))) {
-      vendorEmail = config.VENDORS[key].email || '';
-      break;
+    for (var i = 0; i < configs.length; i++) {
+      var cfg = configs[i];
+      if (cfg.id === 'PARTS-PUMP-1Y') continue; // ノズルカバーは別扱い
+      
+      var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
+      var emailDraft = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
+      
+      results.push({
+        config: cfg,
+        hasAlert: targetStores.length > 0,
+        targetCount: targetStores.length,
+        targetStores: targetStores,
+        emailDraft: emailDraft,
+        targetYear: targetYear
+      });
     }
+    return results;
+  } catch (e) {
+    Logger.log('ERROR in getAllBulkOrderInfo: ' + e.toString());
+    return [];
   }
-  
-  // Gmailの下書きを作成（送信元はnishimura@selfix.jp）
-  GmailApp.createDraft(vendorEmail || '', subject, body, {
-    from: 'nishimura@selfix.jp'
-  });
-  
-  return {
-    success: true,
-    message: 'Gmailの下書きを作成しました',
-    subject: subject,
-    recipient: vendorEmail || '（送信先未設定）'
-  };
 }
 
-/**
- * ノズルカバー交換案件作成
- */
-function createNozzleCoverProject() {
-  var config = getConfig();
-  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
-  var scheduleSheet = ss.getSheetByName(config.SHEET_NAMES.SCHEDULE);
-  
+function createNozzleCoverGmailDraft() {
   var targetStores = getNozzleCoverTargetStores();
   if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
-  
+  var body = createNozzleCoverDraftEmail(targetStores);
+  var subject = '【一括発注】ノズルカバー交換 発注のご依頼';
+  var config = getConfig();
+  var vendorEmail = config.VENDORS['TATSUNO'].email;
+  GmailApp.createDraft(vendorEmail, subject, body, { from: config.ADMIN_MAIL });
+  return { success: true, message: 'Gmailの下書きを作成しました', subject: subject, recipient: vendorEmail };
+}
+
+function createNozzleCoverProject() {
+  var targetStores = getNozzleCoverTargetStores();
+  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
+  var config = getConfig();
+  var sheet = getSheet(config.SHEET_NAMES.SCHEDULE);
   var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  var scheduledDate = new Date(targetYear, 3, 1); // 4月1日
+  var targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
+  var scheduledDate = new Date(targetYear, 3, 1);
   var projectId = 'PARTS-PUMP-1Y-' + targetYear + '-' + Utilities.formatDate(new Date(), 'JST', 'MMddHHmmss');
   
-  var newRow = [
-    projectId,
-    '全店',
-    'PARTS-PUMP-1Y',
-    '【一括発注】ノズルカバー交換 ' + targetStores.length + '店舗',
-    scheduledDate,
-    '見積依頼中',
-    '',
-    'タツノ'
-  ];
-  
-  scheduleSheet.appendRow(newRow);
-  var lastRow = scheduleSheet.getLastRow();
-  scheduleSheet.getRange(lastRow, 5).setNumberFormat('yyyy/MM/dd');
-  
-  return {
-    success: true,
-    projectId: projectId,
-    equipmentName: 'ノズルカバー交換',
-    targetCount: targetStores.length
-  };
+  sheet.appendRow([projectId, '全店', 'PARTS-PUMP-1Y', '【一括発注】ノズルカバー交換 ' + targetStores.length + '店舗', scheduledDate, '見積依頼中', '', 'タツノ']);
+  return { success: true, projectId: projectId, equipmentName: 'ノズルカバー交換', targetCount: targetStores.length };
 }
 
-/**
- * 一括発注メール下書きをGmailに作成
- */
 function createBulkOrderGmailDraft(equipmentId) {
-  var config = getConfig();
   var configs = getBulkOrderConfigs();
-  var cfg = null;
-  for (var i = 0; i < configs.length; i++) {
-    if (configs[i].id === equipmentId) {
-      cfg = configs[i];
-      break;
-    }
-  }
-  
-  if (!cfg) throw new Error('設備IDが見つかりません: ' + equipmentId);
-  
+  var cfg = configs.find(c => c.id === equipmentId);
+  if (!cfg) throw new Error('設備ID不明');
   var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
-  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
+  if (targetStores.length === 0) throw new Error('対象店舗なし');
   
   var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  
+  var targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
   var body = createBulkOrderDraftEmail(cfg, targetStores, targetYear);
-  var subject = '【' + targetYear + '年度】' + cfg.name + ' 発注のご依頼';
+  var subject = '【一括発注】' + cfg.name + ' 発注のご依頼';
   
-  // ベンダーのメールアドレスを取得（ベンダー名でマッチング）
-  var vendorEmail = '';
-  for (var key in config.VENDORS) {
-    var vendorName = config.VENDORS[key].name;
-    // 'タツノ' は '株式会社タツノ' に、'シャープ' は 'シャープ' にマッチ
-    if (vendorName.includes(cfg.vendor) || cfg.vendor.includes(vendorName.replace('株式会社', '').replace('有限会社', ''))) {
-      vendorEmail = config.VENDORS[key].email || '';
-      break;
-    }
-  }
-  
-  // Gmailの下書きを作成（送信元はnishimura@selfix.jp）
-  GmailApp.createDraft(vendorEmail || '', subject, body, {
-    from: 'nishimura@selfix.jp'
-  });
-  
-  return {
-    success: true,
-    message: 'Gmailの下書きを作成しました',
-    subject: subject,
-    recipient: vendorEmail || '（送信先未設定）'
-  };
-}
-
-/**
- * 一括発注案件を作成（汎用）
- */
-function createBulkOrderProject(equipmentId) {
   var config = getConfig();
-  var ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
-  var scheduleSheet = ss.getSheetByName(config.SHEET_NAMES.SCHEDULE);
-  
-  var configs = getBulkOrderConfigs();
-  var cfg = null;
-  for (var i = 0; i < configs.length; i++) {
-    if (configs[i].id === equipmentId) {
-      cfg = configs[i];
-      break;
+  // ベンダーメール検索（簡易）
+  var vendorEmail = '';
+  for(var k in config.VENDORS) {
+    if(config.VENDORS[k].name.includes(cfg.vendor) || cfg.vendor.includes(config.VENDORS[k].name)) {
+      vendorEmail = config.VENDORS[k].email; break;
     }
   }
   
-  if (!cfg) throw new Error('設備IDが見つかりません: ' + equipmentId);
-  
-  var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
-  
-  if (targetStores.length === 0) throw new Error('発注対象の店舗がありません');
-  
-  var today = new Date();
-  var currentMonth = today.getMonth() + 1;
-  var currentYear = today.getFullYear();
-  // 1月から3月は今年4月、4月以降は来年4月を実施予定とする
-  var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  var scheduledDate = new Date(targetYear, 3, 1); // 4月1日
-  var projectId = cfg.id.replace(/[^A-Z0-9]/g, '') + '-' + targetYear + '-' + Utilities.formatDate(new Date(), 'JST', 'MMddHHmmss');
-  
-  var newRow = [
-    projectId,
-    '全店',
-    cfg.id,
-    '【一括発注】' + cfg.name + ' ' + targetStores.length + '店舗',
-    scheduledDate,
-    '見積依頼中',
-    '',
-    cfg.vendor
-  ];
-  
-  scheduleSheet.appendRow(newRow);
-  var lastRow = scheduleSheet.getLastRow();
-  scheduleSheet.getRange(lastRow, 5).setNumberFormat('yyyy/MM/dd');
-  
-  return {
-    success: true,
-    projectId: projectId,
-    equipmentName: cfg.name,
-    targetCount: targetStores.length
-  };
+  GmailApp.createDraft(vendorEmail, subject, body, { from: config.ADMIN_MAIL });
+  return { success: true, message: 'Gmail下書き作成完了', subject: subject, recipient: vendorEmail };
 }
 
-/**
- * ====================================================================
- * その他の既存関数
- * ====================================================================
- */
+function createBulkOrderProject(equipmentId) {
+  var configs = getBulkOrderConfigs();
+  var cfg = configs.find(c => c.id === equipmentId);
+  if (!cfg) throw new Error('設備ID不明');
+  var targetStores = getBulkOrderTargetStores(cfg.id, cfg.cycle, cfg.searchKey);
+  if (targetStores.length === 0) throw new Error('対象店舗なし');
+  
+  var config = getConfig();
+  var sheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  var today = new Date();
+  var targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
+  var scheduledDate = new Date(targetYear, 3, 1);
+  var projectId = cfg.id + '-' + targetYear + '-' + Utilities.formatDate(new Date(), 'JST', 'MMddHHmmss');
+  
+  sheet.appendRow([projectId, '全店', cfg.id, '【一括発注】' + cfg.name + ' ' + targetStores.length + '店舗', scheduledDate, '見積依頼中', '', cfg.vendor]);
+  return { success: true, projectId: projectId, equipmentName: cfg.name, targetCount: targetStores.length };
+}
 
 function checkAndSendAlertMail() {
   const config = getConfig();
@@ -955,97 +671,19 @@ function getStoreList() {
  */
 function testAllBulkOrders() {
   var allInfo = getAllBulkOrderInfo();
-  
   allInfo.forEach(function(info) {
     Logger.log('=== ' + info.config.name + ' ===');
     Logger.log('対象店舗数: ' + info.targetCount);
     Logger.log('アラート: ' + info.hasAlert);
-    
     if (info.targetStores.length > 0) {
       info.targetStores.forEach(function(s) {
-        var type = s.hasHistory ? '[交換済み]' : '[未実施]';
-        Logger.log('  ' + s.name + ' ' + type + ' / ' + s.yearsSinceFirstApril.toFixed(1) + '年経過');
+        Logger.log('  ' + s.name + ' / ' + s.diffYears + '年経過');
       });
     }
-    Logger.log('');
   });
 }
 
-/**
- * ノズルカバー対象店舗のデバッグ表示
- */
 function debugNozzleCover() {
-  const config = getConfig();
-  const ss = SpreadsheetApp.getActiveSpreadsheet() || SpreadsheetApp.openById(config.SPREADSHEET_ID);
-  const masterSheet = ss.getSheetByName(config.SHEET_NAMES.MASTER_EQUIPMENT);
-  const masterValues = masterSheet.getDataRange().getValues();
-  
-  Logger.log('=== ノズルカバー対象店舗デバッグ ===');
-  Logger.log('今日の日付: ' + new Date());
-  
-  const col = {};
-  masterValues[0].forEach((h, i) => { col[h] = i; });
-  
-  const today = new Date();
-  const currentMonth = today.getMonth() + 1;
-  const currentYear = today.getFullYear();
-  const targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
-  const targetApril = new Date(targetYear, 3, 1);
-  
-  Logger.log('現在月: ' + currentMonth + '月');
-  Logger.log('実施予定年: ' + targetYear + '年4月');
-  Logger.log('---');
-  
-  let pumpCount = 0;
-  let eligibleCount = 0;
-  const eligibleStores = [];
-  
-  for (let i = 1; i < masterValues.length; i++) {
-    const row = masterValues[i];
-    const locCode = row[col['拠点コード']];
-    const locName = row[col['拠点名']];
-    const eqId = String(row[col['設備ID']] || '');
-    const eqName = String(row[col['設備名']] || '');
-    const installDate = row[col['設置日(前回実施)']];
-    const partADate = row[col['部品A交換日']];
-    
-    if (!locCode || !locName) continue;
-    
-    const isPump = eqId.includes('PUMP-G-01') || eqId.includes('PUMP-K-01');
-    
-    if (isPump) {
-      pumpCount++;
-      Logger.log(`[${locName}] 設備ID: ${eqId}`);
-      
-      if (installDate instanceof Date && !isNaN(installDate.getTime())) {
-        const baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
-        Logger.log(`  基準日: ${Utilities.formatDate(baseDate, 'JST', 'yyyy/MM/dd')}`);
-        
-        const year = baseDate.getFullYear();
-        const month = baseDate.getMonth();
-        const firstAprilYear = (month < 3) ? year + 1 : year + 2;
-        const firstApril = new Date(firstAprilYear, 3, 1);
-        
-        Logger.log(`  初回実施可能日: ${firstAprilYear}年4月`);
-        Logger.log(`  判定: ${targetYear}年4月 >= ${firstAprilYear}年4月 = ${targetYear >= firstAprilYear}`);
-        
-        if (targetYear >= firstAprilYear) {
-          eligibleCount++;
-          eligibleStores.push(locName);
-          Logger.log(`  ✓ 対象に含まれます`);
-        } else {
-          Logger.log(`  × まだ対象外`);
-        }
-      } else {
-        Logger.log(`  × 設置日なし`);
-      }
-      Logger.log('---');
-    }
-  }
-  
-  Logger.log('====================');
-  Logger.log(`計量機設備数: ${pumpCount}`);
-  Logger.log(`対象店舗数: ${eligibleCount}`);
-  Logger.log(`対象店舗: ${eligibleStores.join(', ')}`);
-  Logger.log('====================');
+  const info = getNozzleCoverInfo();
+  Logger.log(JSON.stringify(info, null, 2));
 }
