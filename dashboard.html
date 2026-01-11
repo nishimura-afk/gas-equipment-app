@@ -201,6 +201,14 @@
 <script>
 console.log('✅ dashboard.html script loaded - v2');
 function dashboardInit(f=false) {
+  console.log('🚀 dashboardInit called, force:', f);
+  
+  // 安全にg_cacheを確認
+  if (!window.g_cache) {
+    console.log('⚠️ g_cache not found, initializing');
+    window.g_cache = {};
+  }
+  
   if(!f && window.g_cache.dashboard) { 
     renderDashboard(window.g_cache.dashboard); 
     loadAllBulkOrderAlerts();
