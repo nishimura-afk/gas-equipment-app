@@ -277,7 +277,8 @@ function getFirstAprilForNozzle(installDate) {
 
 /**
  * ノズルカバー交換の対象店舗を取得
- * PARTS-PUMP-1Yの前回実施日から次回4月を計算し、2026年4月が対象の店舗を返す
+ * 各店舗について、PARTS-PUMP-1Y、PUMP-G-01、PUMP-K-01の日付のうち
+ * 最も新しい日付を「最終実施日」として、そこから次回4月を計算
  */
 function getNozzleCoverTargetStores() {
   var config = getConfig();
@@ -299,7 +300,8 @@ function getNozzleCoverTargetStores() {
   var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
   var targetApril = new Date(targetYear, 3, 1);
   
-  var storeMap = {};
+  // 店舗ごとに日付を収集
+  var storeDates = {};
   
   for (var i = 1; i < masterValues.length; i++) {
     var row = masterValues[i];
@@ -310,47 +312,90 @@ function getNozzleCoverTargetStores() {
     
     if (!locCode || !locName) continue;
     
-    // 設備ID = "PARTS-PUMP-1Y" の行を検索
-    var isPartsPump1Y = (eqId === 'PARTS-PUMP-1Y');
+    // 店舗情報を初期化
+    if (!storeDates[locCode]) {
+      storeDates[locCode] = {
+        code: locCode,
+        name: locName,
+        partsPump1YDate: null,
+        pumpG01Date: null,
+        pumpK01Date: null
+      };
+    }
     
-    if (isPartsPump1Y && installDate instanceof Date && !isNaN(installDate.getTime())) {
-      // 前回実施日から次回4月を計算
-      // PARTS-PUMP-1Yは1年サイクルの季節設備
-      var installYear = installDate.getFullYear();
-      var installMonth = installDate.getMonth() + 1; // 1-12
-      
-      var nextApril;
-      // 前回実施日が4月以前（1-4月）の場合：同年の4月が次回
-      // 前回実施日が5月以降（5-12月）の場合：翌年の4月が次回
-      if (installMonth <= 4) {
-        nextApril = new Date(installYear, 3, 1); // 同年の4月
-      } else {
-        nextApril = new Date(installYear + 1, 3, 1); // 翌年の4月
-      }
-      
-      // 計算した次回4月が既に過ぎている場合は、さらに1年後の4月を計算
-      if (nextApril < today) {
-        nextApril = new Date(nextApril.getFullYear() + 1, 3, 1);
-      }
-      
-      // 実施予定の4月が対象年の4月である店舗を抽出
-      if (nextApril.getFullYear() === targetYear && nextApril.getMonth() === 3) {
-        // 店舗コードをキーにして重複を防ぐ
-        if (!storeMap[locCode]) {
-          storeMap[locCode] = {
-            code: locCode,
-            name: locName,
-            installDate: installDate,
-            nextApril: nextApril
-          };
+    // PARTS-PUMP-1Y、PUMP-G-01、PUMP-K-01の日付を収集
+    // 複数の設備がある場合は、最も新しい日付を保持
+    if (installDate instanceof Date && !isNaN(installDate.getTime())) {
+      if (eqId === 'PARTS-PUMP-1Y') {
+        if (!storeDates[locCode].partsPump1YDate || installDate > storeDates[locCode].partsPump1YDate) {
+          storeDates[locCode].partsPump1YDate = installDate;
+        }
+      } else if (eqId.includes('PUMP-G-01')) {
+        if (!storeDates[locCode].pumpG01Date || installDate > storeDates[locCode].pumpG01Date) {
+          storeDates[locCode].pumpG01Date = installDate;
+        }
+      } else if (eqId.includes('PUMP-K-01')) {
+        if (!storeDates[locCode].pumpK01Date || installDate > storeDates[locCode].pumpK01Date) {
+          storeDates[locCode].pumpK01Date = installDate;
         }
       }
     }
   }
   
   var result = [];
-  for (var key in storeMap) {
-    result.push(storeMap[key]);
+  
+  // 各店舗について、最も新しい日付を「最終実施日」として使用
+  for (var locCode in storeDates) {
+    var store = storeDates[locCode];
+    
+    // 3つの日付のうち最も新しい日付を見つける
+    var latestDate = null;
+    var dates = [
+      store.partsPump1YDate,
+      store.pumpG01Date,
+      store.pumpK01Date
+    ];
+    
+    for (var j = 0; j < dates.length; j++) {
+      var date = dates[j];
+      if (date instanceof Date && !isNaN(date.getTime())) {
+        if (!latestDate || date > latestDate) {
+          latestDate = date;
+        }
+      }
+    }
+    
+    // 有効な日付が存在しない場合はスキップ
+    if (!latestDate) continue;
+    
+    // 最終実施日から次回4月を計算
+    // PARTS-PUMP-1Yは1年サイクルの季節設備
+    var installYear = latestDate.getFullYear();
+    var installMonth = latestDate.getMonth() + 1; // 1-12
+    
+    var nextApril;
+    // 最終実施日が4月以前（1-4月）の場合：同年の4月が次回
+    // 最終実施日が5月以降（5-12月）の場合：翌年の4月が次回
+    if (installMonth <= 4) {
+      nextApril = new Date(installYear, 3, 1); // 同年の4月
+    } else {
+      nextApril = new Date(installYear + 1, 3, 1); // 翌年の4月
+    }
+    
+    // 計算した次回4月が既に過ぎている場合は、さらに1年後の4月を計算
+    if (nextApril < today) {
+      nextApril = new Date(nextApril.getFullYear() + 1, 3, 1);
+    }
+    
+    // 実施予定の4月が対象年の4月である店舗を抽出
+    if (nextApril.getFullYear() === targetYear && nextApril.getMonth() === 3) {
+      result.push({
+        code: store.code,
+        name: store.name,
+        installDate: latestDate,
+        nextApril: nextApril
+      });
+    }
   }
   
   result.sort(function(a, b) {
