@@ -246,7 +246,7 @@ function getBulkOrderConfigs() {
     { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー', cycle: 1, vendor: 'タツノ', emoji: '📦', searchKey: 'ノズルカバー' },
     { id: 'PARTS-SEAL-3Y', name: '釣銭機シール貼り替え', cycle: 3, vendor: 'シャープ', emoji: '🔧', searchKey: 'シール' },
     { id: 'CHG-01', name: '釣銭機カバー', cycle: 6, vendor: 'シャープ', emoji: '💳', searchKey: '釣銭機カバー' },
-    { id: 'PARTS-PUMP-4Y', name: '計量機部品(4年)', cycle: 4, vendor: 'タツノ', emoji: '⛽', searchKey: '計量機部品' },
+    { id: 'PARTS-PUMP-4Y', name: 'ガソリン計量機部品(4年)', cycle: 4, vendor: 'タツノ', emoji: '⛽', searchKey: 'ガソリン計量機部品' },
     { id: 'PARTS-K-PANEL-7Y', name: '灯油パネル更新', cycle: 7, vendor: 'タツノ', emoji: '🛢️', searchKey: '灯油パネル' }
   ];
 }
