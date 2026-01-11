@@ -188,17 +188,17 @@ function loadAllBulkOrderAlerts() {
   
   container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>一括発注情報を確認中...</div>';
   
-  // ノズルカバー情報を取得
-  console.log('📡 Calling getNozzleCoverInfo...');
+  // ノズルカバー情報を取得（関数名を変更）
+  console.log('📡 Calling getNozzleCoverInfoV2...');
   google.script.run
     .withSuccessHandler(function(nozzleInfo) {
-      console.log('✅ getNozzleCoverInfo success:', nozzleInfo);
+      console.log('✅ getNozzleCoverInfoV2 success:', nozzleInfo);
       
-      // その他の一括発注情報を取得
-      console.log('📡 Calling getAllBulkOrderInfo...');
+      // その他の一括発注情報を取得（関数名を変更）
+      console.log('📡 Calling getAllBulkOrderInfoV2...');
       google.script.run
         .withSuccessHandler(function(allInfo) {
-          console.log('✅ getAllBulkOrderInfo success:', allInfo);
+          console.log('✅ getAllBulkOrderInfoV2 success:', allInfo);
           
           window.bulkOrderDataMap = {};
           window.nozzleCoverData = nozzleInfo;
@@ -237,16 +237,16 @@ function loadAllBulkOrderAlerts() {
           }
         })
         .withFailureHandler(function(error) {
-          console.error('❌ getAllBulkOrderInfo failed:', error);
+          console.error('❌ getAllBulkOrderInfoV2 failed:', error);
           container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">一括発注情報の読み込みに失敗しました</div>';
         })
-        .getAllBulkOrderInfo();
+        .getAllBulkOrderInfoV2();
     })
     .withFailureHandler(function(error) {
-      console.error('❌ getNozzleCoverInfo failed:', error);
+      console.error('❌ getNozzleCoverInfoV2 failed:', error);
       container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">読み込みに失敗しました</div>';
     })
-    .getNozzleCoverInfo();
+    .getNozzleCoverInfoV2();
 }
 
 // 一括発注アラート要素を作成
