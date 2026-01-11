@@ -1,6 +1,6 @@
 /**
- * 1_Setup.gs v7.0
- * 4月実施一括発注対応（5種類）完全版 - Fiscal Year Fixed
+ * 1_Setup.gs v7.1
+ * 4月実施一括発注対応（5種類）完全版 - 強制アップデート
  */
 function initialSetup() {
   const config = getConfig();
@@ -163,10 +163,7 @@ function calcStatusRow(installDate, partADate, partBDate, eqName, eqId, cycles, 
       if (yearsBase >= c.years - thresholds.BODY_NOTICE) body = status.NOTICE;
     } 
     else if (c.category === '部材交換' || c.category === '部材更新' || c.category === 'メンテ') {
-      
-      if (c.seasonal) {
-        // 季節性は別途判定
-      } else {
+      if (!c.seasonal) {
         if (yearsA >= c.years + thresholds.PARTS_PREPARE) {
           partA = status.PREPARE;
         } else if (yearsA >= c.years - thresholds.PARTS_NOTICE) {
@@ -238,8 +235,6 @@ function getBulkOrderConfigs() {
 
 /**
  * 年度判定ユーティリティ
- * 指定日が属する年度（Fiscal Year）を返す
- * 例: 2022年3月 -> FY2021, 2022年4月 -> FY2022
  */
 function getFiscalYear(date) {
   if (!date || isNaN(date.getTime())) return 0;
@@ -264,8 +259,6 @@ function getNozzleCoverTargetStores() {
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
-  
-  // 1-3月なら今年度(同年)の4月ではなく、次の4月(同年)をターゲット。
   var targetYear = (currentMonth >= 1 && currentMonth <= 3) ? currentYear : currentYear + 1;
   
   var storeDates = {};
@@ -297,8 +290,6 @@ function getNozzleCoverTargetStores() {
     if (store.dates.length === 0) continue;
     
     var latestDate = new Date(Math.max.apply(null, store.dates));
-    
-    // FYベースで次回実施年を計算
     var nextDueYear = getFiscalYear(latestDate) + 1;
     
     if (nextDueYear <= targetYear) {
@@ -356,7 +347,7 @@ function getNozzleCoverInfo() {
 }
 
 /**
- * 一括発注対象店舗を取得（汎用・年度基準）
+ * 一括発注対象店舗を取得（汎用）
  */
 function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
   Logger.log('-> BulkSearch: ' + equipmentId + ' (Cycle:' + cycleYears + ')');
@@ -392,7 +383,6 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
     
     if (isMatch && installDate instanceof Date && !isNaN(installDate.getTime())) {
       var baseDate = (partADate instanceof Date && !isNaN(partADate.getTime())) ? partADate : installDate;
-      
       var installFY = getFiscalYear(baseDate);
       var targetFY = targetYear;
       var diffYears = targetFY - installFY;
@@ -502,7 +492,6 @@ function createBulkOrderGmailDraft(equipmentId) {
   var subject = '【一括発注】' + cfg.name + ' 発注のご依頼';
   
   var config = getConfig();
-  // ベンダーメール検索（簡易）
   var vendorEmail = '';
   for(var k in config.VENDORS) {
     if(config.VENDORS[k].name.includes(cfg.vendor) || cfg.vendor.includes(config.VENDORS[k].name)) {
@@ -664,26 +653,4 @@ function getStoreList() {
     }
   } catch (e) {}
   return [{ name: '糸我' }, { name: 'かつらぎ' }, { name: '和佐' }, { name: '熊野' }, { name: '貴志川' }, { name: 'りんくう泉南' }, { name: '御所' }, { name: '東和歌山' }, { name: '和歌山北インター' }, { name: '紀三井寺' }, { name: '天理' }, { name: '厚木' }, { name: '坂出' }, { name: '裾野' }, { name: '徳島石井' }, { name: '小松島' }, { name: '池田' }, { name: '倉吉' }, { name: '小山' }, { name: '岡南' }, { name: '牛久' }, { name: '土浦' }, { name: '岐阜東' }, { name: '太田' }, { name: '北名古屋' }, { name: 'ひたちなか' }].map((d, i) => ({ code: 'SS' + ('000' + (i + 1)).slice(-3), name: d.name }));
-}
-
-/**
- * テスト関数
- */
-function testAllBulkOrders() {
-  var allInfo = getAllBulkOrderInfo();
-  allInfo.forEach(function(info) {
-    Logger.log('=== ' + info.config.name + ' ===');
-    Logger.log('対象店舗数: ' + info.targetCount);
-    Logger.log('アラート: ' + info.hasAlert);
-    if (info.targetStores.length > 0) {
-      info.targetStores.forEach(function(s) {
-        Logger.log('  ' + s.name + ' / ' + s.diffYears + '年経過');
-      });
-    }
-  });
-}
-
-function debugNozzleCover() {
-  const info = getNozzleCoverInfo();
-  Logger.log(JSON.stringify(info, null, 2));
 }
