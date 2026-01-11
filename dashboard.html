@@ -188,17 +188,17 @@ function loadAllBulkOrderAlerts() {
   
   container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>一括発注情報を確認中...</div>';
   
-  // ノズルカバー情報を取得（関数名を変更）
-  console.log('📡 Calling getNozzleCoverInfoV2...');
+  // ノズルカバー情報を取得（関数名V3へ変更）
+  console.log('📡 Calling getNozzleCoverInfoV3...');
   google.script.run
     .withSuccessHandler(function(nozzleInfo) {
-      console.log('✅ getNozzleCoverInfoV2 success:', nozzleInfo);
+      console.log('✅ getNozzleCoverInfoV3 success:', nozzleInfo);
       
-      // その他の一括発注情報を取得（関数名を変更）
-      console.log('📡 Calling getAllBulkOrderInfoV2...');
+      // その他の一括発注情報を取得
+      console.log('📡 Calling getAllBulkOrderInfoV3...');
       google.script.run
         .withSuccessHandler(function(allInfo) {
-          console.log('✅ getAllBulkOrderInfoV2 success:', allInfo);
+          console.log('✅ getAllBulkOrderInfoV3 success:', allInfo);
           
           window.bulkOrderDataMap = {};
           window.nozzleCoverData = nozzleInfo;
@@ -208,7 +208,7 @@ function loadAllBulkOrderAlerts() {
           let hasAnyAlert = false;
           
           // ノズルカバーを表示
-          if (nozzleInfo && nozzleInfo.hasAlert && nozzleInfo.targetCount > 0) {
+          if (nozzleInfo && nozzleInfo.hasAlert) {
             hasAnyAlert = true;
             try {
               const div = createBulkAlertDiv(nozzleInfo, 'nozzle');
@@ -237,16 +237,16 @@ function loadAllBulkOrderAlerts() {
           }
         })
         .withFailureHandler(function(error) {
-          console.error('❌ getAllBulkOrderInfoV2 failed:', error);
+          console.error('❌ getAllBulkOrderInfoV3 failed:', error);
           container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">一括発注情報の読み込みに失敗しました</div>';
         })
-        .getAllBulkOrderInfoV2();
+        .getAllBulkOrderInfoV3();
     })
     .withFailureHandler(function(error) {
-      console.error('❌ getNozzleCoverInfoV2 failed:', error);
+      console.error('❌ getNozzleCoverInfoV3 failed:', error);
       container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">読み込みに失敗しました</div>';
     })
-    .getNozzleCoverInfoV2();
+    .getNozzleCoverInfoV3();
 }
 
 // 一括発注アラート要素を作成
