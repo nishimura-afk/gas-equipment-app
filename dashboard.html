@@ -23,7 +23,7 @@
     </div>
   </div>
 
-  <!-- 中段: 重要設備 -->
+  <!-- 中段: 重要設備（井戸ポンプメンテを含む） -->
   <div class="bg-white rounded-lg border-2 border-rose-200 shadow-md overflow-hidden">
     <div class="bg-rose-50 p-3 border-b border-rose-200 flex justify-between items-center">
       <h3 class="text-lg font-bold text-rose-800"><i class="fas fa-exclamation-triangle mr-2"></i>【重要】本体更新・入替</h3>
@@ -32,25 +32,9 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm text-left">
         <thead class="bg-rose-100 text-rose-800">
-          <tr><th class="p-2">拠点</th><th class="p-2">設備名</th><th class="p-2">状況</th></tr>
+          <tr><th class="p-2">拠点</th><th class="p-2">設備名</th><th class="p-2">状況</th><th class="p-2">アクション</th></tr>
         </thead>
-        <tbody id="table-major" class="divide-y divide-rose-100"><tr><td colspan="3" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- 下段: 定例消耗品 -->
-  <div class="bg-white rounded-lg border-2 border-amber-200 shadow-md overflow-hidden">
-    <div class="bg-amber-50 p-3 border-b border-amber-200 flex justify-between items-center">
-      <h3 class="text-lg font-bold text-amber-800"><i class="fas fa-tools mr-2"></i>【定例】定期部品交換・消耗品</h3>
-      <span class="text-xs bg-white px-2 py-1 rounded text-amber-600 font-bold border border-amber-200" id="count-minor">0件</span>
-    </div>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm text-left">
-        <thead class="bg-amber-100 text-amber-800">
-          <tr><th class="p-2">拠点</th><th class="p-2">内容</th><th class="p-2">時期</th></tr>
-        </thead>
-        <tbody id="table-minor" class="divide-y divide-amber-100"><tr><td colspan="3" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
+        <tbody id="table-major" class="divide-y divide-rose-100"><tr><td colspan="4" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -127,11 +111,12 @@ function dashboardInit(f=false) {
 function renderDashboard(data) {
   try { showLoading(false); } catch(e) {}
   
-  const legalT = document.getElementById('table-legal'); legalT.innerHTML = '';
-  const majorT = document.getElementById('table-major'); majorT.innerHTML = '';
-  const minorT = document.getElementById('table-minor'); minorT.innerHTML = '';
+  const legalT = document.getElementById('table-legal'); 
+  legalT.innerHTML = '';
+  const majorT = document.getElementById('table-major'); 
+  majorT.innerHTML = '';
   
-  let lCount = 0, mjCount = 0, mnCount = 0;
+  let lCount = 0, mjCount = 0;
 
   if (data && data.noticeList) {
     data.noticeList.forEach(i => {
@@ -144,37 +129,34 @@ function renderDashboard(data) {
         let statusLabel = i['部品Aステータス'];
         let statusColor = (statusLabel === '期限超過') ? 'text-red-600' : 'text-indigo-600';
         let status = `<span class="font-bold ${statusColor}">${statusLabel}</span>`;
-        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td>`;
+        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td><td class="p-2"></td>`;
         legalT.appendChild(tr);
       }
-      else if (category === '本体更新' || category === '美観') {
+      else if (category === '本体更新' || category === '美観' || category === 'メンテ') {
+        // 井戸ポンプメンテ（カテゴリ='メンテ'）もここに含める
         mjCount++;
         tr.className = "hover:bg-rose-50";
         let status = `<span class="font-bold ${i['本体ステータス']==='期限超過'?'text-rose-600':'text-amber-600'}">${i['本体ステータス']}</span>`;
         if(i['subsidyAlert']) status += `<br><span class="text-xs text-white bg-red-500 px-1 rounded">${i['subsidyAlert']}</span>`;
-        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td>`;
+        
+        // エアコンの場合は特別なボタンを表示
+        let actionBtn = '';
+        const eqName = i['設備名'] || '';
+        if (eqName.includes('エアコン')) {
+          actionBtn = `<button onclick="createPhoneCallProject('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${eqName}')" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs">📞 電話依頼＋案件化</button>`;
+        }
+        
+        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td><td class="p-2">${actionBtn}</td>`;
         majorT.appendChild(tr);
-      } 
-      else {
-        mnCount++;
-        tr.className = "hover:bg-amber-50";
-        let content = [];
-        if(i['部品Aステータス']!=='正常') content.push(`消耗品: ${i['部品Aステータス']}`);
-        if(i['部品Bステータス']!=='正常' && i['部品B対象']) content.push(`整備: ${i['部品Bステータス']}`);
-        if(i['本体ステータス']!=='正常') content.push(`本体: ${i['本体ステータス']}`);
-        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2 text-xs font-bold text-slate-600">${content.join('<br>')}</td>`;
-        minorT.appendChild(tr);
       }
     });
   }
 
   document.getElementById('count-legal').innerText = lCount + '件';
   document.getElementById('count-major').innerText = mjCount + '件';
-  document.getElementById('count-minor').innerText = mnCount + '件';
 
-  if(lCount===0) legalT.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-400 text-xs">対応が必要な法定検査はありません</td></tr>';
-  if(mjCount===0) majorT.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-400 text-xs">対応が必要な重要案件はありません</td></tr>';
-  if(mnCount===0) minorT.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-400 text-xs">対応が必要な消耗品交換はありません</td></tr>';
+  if(lCount===0) legalT.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400 text-xs">対応が必要な法定検査はありません</td></tr>';
+  if(mjCount===0) majorT.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400 text-xs">対応が必要な重要案件はありません</td></tr>';
 }
 
 // 全ての一括発注アラート読み込み（ノズルカバー + その他4種類）
@@ -292,7 +274,6 @@ function createBulkAlertDiv(info, type) {
     <div class="flex items-start justify-between mb-2">
       <div class="flex-1">
         <div class="text-base font-bold text-blue-900 mb-1">
-          <span class="text-xl mr-2">${info.config.emoji}</span>
           ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
         </div>
         <div class="text-sm text-blue-700 ml-7 mt-1">
@@ -548,5 +529,29 @@ function createBulkOrderProjectFor(equipmentId) {
       alert('❌ 案件作成に失敗しました\n\n' + error);
     })
     .createBulkOrderProject(equipmentId);
+}
+
+// エアコン更新：電話依頼＋案件作成
+function createPhoneCallProject(locCode, eqId, locName, eqName) {
+  const memo = prompt(
+    `${locName} - ${eqName}\n\n電話依頼の内容や業者名をメモしてください：`,
+    'ケーズデンキに電話依頼'
+  );
+  
+  if (!memo) return; // キャンセル
+  
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler((result) => {
+      showLoading(false);
+      alert(`✅ 案件を作成しました\n\n電話で依頼後、ステータスを更新してください`);
+      navigate('projects'); // 案件管理タブへ移動
+    })
+    .withFailureHandler((error) => {
+      showLoading(false);
+      alert('❌ エラー: ' + error);
+    })
+    .createPhoneCallProject(locCode, eqId, eqName, memo);
 }
 </script>

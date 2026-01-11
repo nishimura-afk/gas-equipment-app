@@ -337,3 +337,27 @@ function getAllBulkOrderInfo() {
     return [];
   }
 }
+
+/**
+ * 電話依頼＋案件作成（エアコンなど）
+ */
+function createPhoneCallProject(locCode, eqId, eqName, memo) {
+  const config = getConfig();
+  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  
+  const uniqueId = Utilities.getUuid();
+  const workType = `${eqName}更新（電話依頼）`;
+  
+  scheduleSheet.appendRow([
+    uniqueId,
+    locCode,
+    eqId,
+    workType,
+    '', // 日程は後で入力
+    config.PROJECT_STATUS.ESTIMATE_REQ, // ステータス：見積依頼中
+    '',
+    memo // 備考欄にメモを記録
+  ]);
+  
+  return { success: true, message: '案件を作成しました' };
+}
