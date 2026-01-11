@@ -160,3 +160,173 @@ function createSingleDraftAndProject(locName, locCode, eqName, eqId, workType, b
   getSheet(config.SHEET_NAMES.SCHEDULE).appendRow([uniqueId, locCode, eqId, workType, '', config.PROJECT_STATUS.ESTIMATE_REQ, '', '']);
   return { success: true };
 }
+
+/**
+ * ベンダー別にアラートをグループ化
+ */
+function getVendorGroupedAlerts() {
+  const config = getConfig();
+  const notices = getDashboardData().noticeList;
+  const vendors = config.VENDORS;
+  
+  // 初期化
+  for (const key in vendors) {
+    vendors[key].items = [];
+  }
+  
+  // 振り分け
+  notices.forEach(item => {
+    const eqName = item['設備名'] || item['設備ID'];
+    let assigned = false;
+    
+    for (const key in vendors) {
+      if (key === 'OTHERS') continue;
+      if (vendors[key].keywords.some(k => eqName.includes(k))) {
+        vendors[key].items.push(item);
+        assigned = true;
+        break;
+      }
+    }
+    
+    if (!assigned) vendors['OTHERS'].items.push(item);
+  });
+  
+  return vendors;
+}
+
+/**
+ * 個別案件のGmail下書きと案件作成
+ */
+function createIndividualDraftAndProject(locCode, locName, eqId, eqName, workType, spec) {
+  const config = getConfig();
+  
+  // メール本文作成
+  const subject = '【見積依頼】見積もり依頼の件';
+  let body = 'いつもお世話になっております。\n日商有田株式会社西村です。\n\n';
+  body += '以下の設備につきまして、見積もりをお願いしたく存じます。\n\n';
+  body += `■ ${locName}\n`;
+  body += `・対象設備: ${eqName}\n`;
+  if (spec) body += `・型式: ${spec}\n`;
+  body += `・作業内容: ${workType}\n\n`;
+  body += '--------------------------------------------------\n';
+  body += '日商有田株式会社\n西村\n';
+  body += '--------------------------------------------------';
+  
+  // Gmail下書き作成
+  GmailApp.createDraft('', subject, body, {
+    from: 'nishimura@selfix.jp'
+  });
+  
+  // 案件シートに登録
+  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  const uniqueId = Utilities.getUuid();
+  scheduleSheet.appendRow([
+    uniqueId,
+    locCode,
+    eqId,
+    workType,
+    '',
+    config.PROJECT_STATUS.ESTIMATE_REQ,
+    '',
+    ''
+  ]);
+  
+  return { success: true, message: 'Gmail下書きを作成し、案件を登録しました' };
+}
+
+/**
+ * 選択された案件のみでベンダー別下書きを作成
+ */
+function createVendorDraftForSelected(vendorKey, selectedItemIds) {
+  const config = getConfig();
+  const notices = getDashboardData().noticeList;
+  const vendor = config.VENDORS[vendorKey];
+  
+  if (!vendor) throw new Error('ベンダーが見つかりません');
+  
+  // 選択されたアイテムのみフィルタ
+  const selectedItems = notices.filter(item => {
+    const itemId = `${item['拠点コード']}_${item['設備ID']}`;
+    return selectedItemIds.includes(itemId);
+  });
+  
+  if (selectedItems.length === 0) {
+    return { message: '対象案件がありません' };
+  }
+  
+  // メール本文作成
+  const subject = '【見積依頼】見積り依頼の件';
+  let body = 'いつもお世話になっております。\n日商有田株式会社西村です。\n\n';
+  body += '以下の設備につきまして、見積もりをお願いしたく存じます。\n\n';
+  
+  selectedItems.forEach(item => {
+    let eqDisplayName = item['設備名'];
+    if (eqDisplayName.includes('釣銭機カバー')) {
+      eqDisplayName = eqDisplayName.replace('釣銭機カバー', '投入/取出し口のプラスチックカバー');
+    }
+    if (eqDisplayName.includes('パネル')) {
+      eqDisplayName = eqDisplayName.replace('パネル', 'タッチパネル');
+    }
+    
+    body += `■ ${item['拠点名']}\n`;
+    body += `・設備: ${eqDisplayName}\n`;
+    if (item['spec']) body += `・型式: ${item['spec']}\n`;
+    if (item['nextWorkMemo']) body += `・備考: ${item['nextWorkMemo']}\n`;
+    body += '\n';
+  });
+  
+  body += '--------------------------------------------------\n';
+  body += '日商有田株式会社\n西村\n';
+  body += '--------------------------------------------------';
+  
+  // Gmail下書き作成
+  GmailApp.createDraft(vendor.email || '', subject, body, {
+    from: 'nishimura@selfix.jp'
+  });
+  
+  // 案件シートに登録
+  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  selectedItems.forEach(item => {
+    const uniqueId = Utilities.getUuid();
+    scheduleSheet.appendRow([
+      uniqueId,
+      item['拠点コード'],
+      item['設備ID'],
+      '見積依頼',
+      '',
+      config.PROJECT_STATUS.ESTIMATE_REQ,
+      '',
+      vendor.name
+    ]);
+  });
+  
+  return {
+    message: `${vendor.name}宛てに${selectedItems.length}件の下書きを作成しました`
+  };
+}
+
+/**
+ * 複数ベンダーの選択案件をまとめて処理
+ */
+function createMultipleVendorDrafts(vendorGroups) {
+  const results = [];
+  
+  for (const vendorKey in vendorGroups) {
+    const itemIds = vendorGroups[vendorKey];
+    const result = createVendorDraftForSelected(vendorKey, itemIds);
+    results.push(result.message);
+  }
+  
+  return { message: results.join('\n') };
+}
+
+/**
+ * カスタムGmail下書き作成
+ */
+function createCustomGmailDraft(to, subject, body) {
+  GmailApp.createDraft(to, subject, body, {
+    from: 'nishimura@selfix.jp'
+  });
+  
+  return { success: true, message: 'Gmail下書きを作成しました' };
+}

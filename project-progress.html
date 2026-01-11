@@ -28,21 +28,6 @@
       <div class="p-8 text-center text-gray-500">読み込み中...</div>
     </div>
   </div>
-  
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-    <div class="bg-indigo-50 rounded-lg shadow border border-indigo-200 p-4">
-      <h3 class="text-sm font-bold text-indigo-800 mb-2 border-b border-indigo-200 pb-1">法定検査</h3>
-      <div id="new-legal-container" class="space-y-2"><div class="text-xs text-gray-400">なし</div></div>
-    </div>
-    <div class="bg-rose-50 rounded-lg shadow border border-rose-200 p-4">
-      <h3 class="text-sm font-bold text-rose-800 mb-2 border-b border-rose-200 pb-1">本体更新</h3>
-      <div id="new-major-container" class="space-y-2"><div class="text-xs text-gray-400">なし</div></div>
-    </div>
-    <div class="bg-amber-50 rounded-lg shadow border border-amber-200 p-4">
-      <h3 class="text-sm font-bold text-amber-800 mb-2 border-b border-amber-200 pb-1">定期部品交換</h3>
-      <div id="new-minor-container" class="space-y-2"><div class="text-xs text-gray-400">なし</div></div>
-    </div>
-  </div>
 </div>
 
 <div id="schedule-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex items-center justify-center z-50">
@@ -72,18 +57,13 @@
 function progressInit(f=false) {
   if(!f && window.g_cache.progress) { 
     renderStatusBars(window.g_cache.progress); 
-    if(window.g_cache.newTargets) renderNewTargets(window.g_cache.newTargets); 
     return; 
   }
   showLoading(true); 
   google.script.run.withSuccessHandler(r => { 
     window.g_cache.progress=r; 
     renderStatusBars(r); 
-    google.script.run.withSuccessHandler(t => { 
-      window.g_cache.newTargets=t; 
-      renderNewTargets(t); 
-      showLoading(false); 
-    }).getExchangeTargetsForUI(); 
+    showLoading(false);
   }).getAllActiveProjects();
 }
 
@@ -125,44 +105,6 @@ function renderStatusBars(projects) {
       </div>`;
     c.appendChild(div);
   });
-}
-
-function renderNewTargets(list) {
-  const cL = document.getElementById('new-legal-container'); cL.innerHTML = '';
-  const cM = document.getElementById('new-major-container'); cM.innerHTML = '';
-  const cm = document.getElementById('new-minor-container'); cm.innerHTML = '';
-  
-  if(list.length===0) return;
-
-  list.forEach(i => {
-    let alert=i.subsidyAlert?`<div class="text-xs text-white bg-red-500 px-2 py-1 rounded font-bold mt-1 inline-block">${i.subsidyAlert}</div>`:'';
-    let memo=i.nextWorkMemo?`<div class="text-xs text-blue-600 mt-1"><i class="fas fa-sticky-note mr-1"></i>${i.nextWorkMemo}</div>`:'';
-    const div=document.createElement('div'); div.className="bg-white p-2 rounded shadow border hover:shadow-md transition text-sm";
-    
-    // 赤文字削除
-    div.innerHTML=`
-      <div class="flex justify-between items-start mb-1">
-        <div>
-          <div class="font-bold text-slate-800">${i.locName}</div>
-          <div class="text-xs text-slate-500">${i.equipmentName}</div>
-        </div>
-        <button onclick="directSchedule('${i.locCode}','${i.equipmentId}','${i.exchangeTargets}')" class="bg-slate-200 hover:bg-slate-300 px-2 py-1 rounded text-xs"><i class="fas fa-plus"></i></button>
-      </div>
-      ${alert}${memo}`;
-    
-    // サーバー判定を信頼
-    if (i.category === '法定検査') {
-      cL.appendChild(div);
-    } else if (i.category === '本体更新' || i.category === '美観') {
-      cM.appendChild(div);
-    } else {
-      cm.appendChild(div);
-    }
-  });
-  
-  if(cL.innerHTML==='') cL.innerHTML='<div class="text-xs text-gray-400">なし</div>';
-  if(cM.innerHTML==='') cM.innerHTML='<div class="text-xs text-gray-400">なし</div>';
-  if(cm.innerHTML==='') cm.innerHTML='<div class="text-xs text-gray-400">なし</div>';
 }
 
 function updateStatus(id,st) { 

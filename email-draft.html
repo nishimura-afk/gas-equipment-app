@@ -1,57 +1,585 @@
-<div class="space-y-6">
+<div class="space-y-8">
   
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="bg-indigo-50 p-6 rounded shadow border border-indigo-200">
-      <h2 class="text-lg font-bold mb-2 text-indigo-800"><i class="fas fa-truck-loading mr-2"></i>部品・定期メンテの発注</h2>
-      <p class="text-sm text-indigo-700 mb-4">
-        アラート中の設備を<strong>ベンダー別</strong>に自動で振り分け、まとめ発注メールを作成します。<br>
-        ※案件ステータスは<strong>「発注済」</strong>になります。
+  <!-- セクション1: 個別案件の見積依頼 -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2 class="section-title">
+        <i class="fas fa-file-invoice mr-2 text-blue-600"></i>
+        個別案件の見積依頼
+      </h2>
+      <p class="section-description">
+        アラート外の設備や緊急対応など、個別に見積もりを依頼する場合
       </p>
-      <button onclick="createVendorDrafts()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded shadow transition">
-        <i class="fas fa-paper-plane mr-2"></i>ベンダー別まとめ発注
-      </button>
     </div>
-
-    <div class="bg-amber-50 p-6 rounded shadow border border-amber-200">
-      <h2 class="text-lg font-bold mb-2 text-amber-800"><i class="fas fa-file-invoice-dollar mr-2"></i>個別の見積依頼</h2>
-      <p class="text-sm text-amber-700 mb-4">
-        アラート中の全案件について、<strong>1件ずつ「見積依頼メール」</strong>の下書きを作成します。<br>
-        ※案件ステータスは<strong>「見積依頼中」</strong>になります。
-      </p>
-      <button onclick="createAutoDrafts()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 px-6 rounded shadow transition">
-        <i class="fas fa-mail-bulk mr-2"></i>一括見積依頼
-      </button>
-    </div>
-  </div>
-
-  <div class="bg-white p-6 rounded shadow border mt-4">
-    <h2 class="text-lg font-bold mb-4 text-slate-800"><i class="fas fa-pen mr-2"></i>手動で個別作成</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-      <div class="bg-slate-50 p-4 rounded border space-y-4">
-        <div><label class="block text-xs font-bold text-slate-500 mb-1">対象拠点</label><select id="email-loc-select" class="w-full border rounded p-2 bg-white" onchange="filterEquipments()"><option value="">読み込み中...</option></select></div>
-        <div><label class="block text-xs font-bold text-slate-500 mb-1">対象設備</label><select id="email-eq-select" class="w-full border rounded p-2 bg-white"><option value="">拠点を選択してください</option></select></div>
-        <div><label class="block text-xs font-bold text-slate-500 mb-1">作業内容</label><input type="text" id="email-work-input" class="w-full border rounded p-2" placeholder="例: 本体入替の見積もり"></div>
-        <div class="flex flex-col gap-2">
-          <button onclick="generateDraft()" class="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 transition shadow"><i class="fas fa-eye mr-1"></i> 文面プレビュー</button>
-          <button onclick="saveSingleDraftAndProject()" class="w-full bg-green-600 text-white font-bold py-2 rounded hover:bg-green-700 transition shadow hidden" id="btn-save-single"><i class="fas fa-paper-plane mr-1"></i> 下書き保存＆案件登録</button>
+    
+    <div class="form-container">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">対象拠点</label>
+          <select id="email-loc-select" class="form-select" onchange="filterEquipmentsForEmail()">
+            <option value="">選択してください...</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">対象設備</label>
+          <select id="email-eq-select" class="form-select">
+            <option value="">拠点を選択してください</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">作業内容</label>
+          <input type="text" id="email-work-input" class="form-input" 
+                 placeholder="例: 本体入替の見積もり、故障修理">
+        </div>
+        
+        <div class="form-group">
+          <label class="form-label">型式・備考（オプション）</label>
+          <input type="text" id="email-spec-input" class="form-input" 
+                 placeholder="例: タツノ製 型番不明">
         </div>
       </div>
-      <div class="flex flex-col"><textarea id="email-result" class="flex-1 w-full border rounded p-4 font-mono text-sm bg-white text-slate-700 leading-relaxed h-48" placeholder="プレビューボタンを押すとここに文面が表示されます"></textarea></div>
+      
+      <div class="form-actions">
+        <button onclick="createIndividualDraft()" class="btn-primary">
+          <i class="fas fa-envelope mr-2"></i>Gmail下書き + 案件作成
+        </button>
+      </div>
     </div>
   </div>
 
-  <div id="gmail-link-area" class="hidden text-center p-4 bg-gray-100 rounded border border-gray-300">
-    <p class="text-sm text-gray-600 mb-2">下書きの作成が完了しました</p>
-    <a href="https://mail.google.com/mail/u/0/#drafts" target="_blank" class="inline-block bg-white text-red-600 border border-red-600 hover:bg-red-50 font-bold py-2 px-6 rounded shadow transition"><i class="fab fa-google mr-2"></i>Gmailの下書きを確認する</a>
+  <!-- セクション2: ベンダー別まとめ発注 -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2 class="section-title">
+        <i class="fas fa-building mr-2 text-green-600"></i>
+        ベンダー別まとめ発注
+      </h2>
+      <p class="section-description">
+        現在アラート中の設備を業者別に集約。必要なものだけ選んでまとめて発注できます
+      </p>
+    </div>
+    
+    <!-- ツールバー -->
+    <div class="vendor-toolbar">
+      <button onclick="selectAllVendorItems()" class="btn-ghost">
+        <i class="fas fa-check-square mr-1"></i>すべて選択
+      </button>
+      <button onclick="deselectAllVendorItems()" class="btn-ghost">
+        <i class="fas fa-square mr-1"></i>すべて解除
+      </button>
+      <span class="selected-count" id="vendor-selected-count">0件選択中</span>
+    </div>
+    
+    <!-- ベンダーカード -->
+    <div id="vendor-cards-container" class="vendor-cards">
+      <div class="loading-placeholder">
+        <i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...
+      </div>
+    </div>
+
+    <!-- 一括実行ボタン -->
+    <div class="form-actions">
+      <button onclick="createSelectedVendorDrafts()" 
+              class="btn-primary" 
+              id="btn-create-vendor-drafts"
+              disabled>
+        <i class="fas fa-envelope-open-text mr-2"></i>選択した案件のGmail下書き作成
+      </button>
+    </div>
   </div>
+
+  <!-- セクション3: カスタムメール作成 -->
+  <div class="section-card">
+    <div class="section-header">
+      <h2 class="section-title">
+        <i class="fas fa-edit mr-2 text-purple-600"></i>
+        カスタムメール作成
+      </h2>
+      <p class="section-description">
+        特殊な内容や複数設備のまとめ依頼など、自由にメールを作成
+      </p>
+    </div>
+    
+    <div class="form-container">
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label">宛先（業者名・メールアドレス）</label>
+          <input type="text" id="custom-to" class="form-input" 
+                 placeholder="例: タツノ（tatsuno@example.com）">
+        </div>
+        
+        <div class="form-group full-width">
+          <label class="form-label">件名</label>
+          <input type="text" id="custom-subject" class="form-input" 
+                 value="【見積依頼】見積もり依頼の件">
+        </div>
+        
+        <div class="form-group full-width">
+          <label class="form-label">本文</label>
+          <textarea id="custom-body" class="form-textarea" rows="10" 
+                    placeholder="お世話になっております。&#10;&#10;以下について見積もりをお願いいたします。"></textarea>
+        </div>
+      </div>
+      
+      <div class="form-actions">
+        <button onclick="createCustomDraft()" class="btn-primary">
+          <i class="fas fa-envelope mr-2"></i>Gmail下書き作成
+        </button>
+      </div>
+    </div>
+  </div>
+
 </div>
+
 <script>
-let allEquipments = [];
-function emailInit(f=false) { if(!f && window.g_cache.list) { allEquipments=window.g_cache.list; populateEmailSelect(allEquipments); return; } google.script.run.withSuccessHandler(l=>{window.g_cache.list=l;allEquipments=l;populateEmailSelect(l);}).getEquipmentList(); }
-function populateEmailSelect(l) { const s=document.getElementById('email-loc-select'); s.innerHTML='<option value="">選択してください...</option>'; const m=new Map(); l.forEach(i=>m.set(i['拠点コード'],i['拠点名'])); m.forEach((n,c)=>{const o=document.createElement('option');o.value=c;o.innerText=n;s.appendChild(o);}); }
-function filterEquipments() { const c=document.getElementById('email-loc-select').value; const s=document.getElementById('email-eq-select'); s.innerHTML='<option value="">設備を選択...</option>'; if(!c)return; allEquipments.filter(e=>e['拠点コード']===c).forEach(t=>{const o=document.createElement('option');o.value=t['設備ID'];o.text=t['設備名']||t['設備ID'];s.appendChild(o);}); }
-function generateDraft() { const ls=document.getElementById('email-loc-select'); if(!ls.value)return alert('拠点を選択してください'); showLoading(true); google.script.run.withSuccessHandler(r=>{document.getElementById('email-result').value=r;document.getElementById('btn-save-single').classList.remove('hidden');document.getElementById('gmail-link-area').classList.add('hidden');showLoading(false);}).generateQuoteRequest(ls.options[ls.selectedIndex].text,document.getElementById('email-eq-select').options[document.getElementById('email-eq-select').selectedIndex].text,document.getElementById('email-work-input').value); }
-function createAutoDrafts() { if(!confirm('一括見積依頼を作成しますか？'))return; showLoading(true); google.script.run.withSuccessHandler(r=>{showLoading(false);alert(r.message);document.getElementById('gmail-link-area').classList.remove('hidden');}).createAlertDrafts(); }
-function createVendorDrafts() { if(!confirm('ベンダー別にまとめて発注メールを作成し、案件を「発注済」にしますか？'))return; showLoading(true); google.script.run.withSuccessHandler(r=>{showLoading(false);alert(r.message);document.getElementById('gmail-link-area').classList.remove('hidden');}).createVendorBatchDrafts(); }
-function saveSingleDraftAndProject() { if(!confirm('保存しますか？'))return; const ls=document.getElementById('email-loc-select'); const es=document.getElementById('email-eq-select'); showLoading(true); google.script.run.withSuccessHandler(()=>{showLoading(false);alert('登録しました');document.getElementById('btn-save-single').classList.add('hidden');document.getElementById('email-result').value='';document.getElementById('gmail-link-area').classList.remove('hidden');}).createSingleDraftAndProject(ls.options[ls.selectedIndex].text,ls.value,es.options[es.selectedIndex].text,es.value,document.getElementById('email-work-input').value,document.getElementById('email-result').value); }
+// ========================================
+// セクション1: 個別案件の見積依頼
+// ========================================
+
+let allEquipmentsForEmail = [];
+
+function emailInit(force = false) {
+  console.log('📧 emailInit called');
+  
+  // 設備リストの取得（個別案件用）
+  if (!force && window.g_cache.list) {
+    allEquipmentsForEmail = window.g_cache.list;
+    populateEmailLocationSelect(allEquipmentsForEmail);
+  } else {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler((list) => {
+        window.g_cache.list = list;
+        allEquipmentsForEmail = list;
+        populateEmailLocationSelect(list);
+        showLoading(false);
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert('設備リストの読み込みエラー: ' + error);
+      })
+      .getEquipmentList();
+  }
+  
+  // ベンダー別集約データの取得
+  loadVendorSummary();
+}
+
+function populateEmailLocationSelect(list) {
+  const select = document.getElementById('email-loc-select');
+  select.innerHTML = '<option value="">選択してください...</option>';
+  
+  const locations = new Map();
+  list.forEach(item => {
+    if (item['拠点コード'] && item['拠点名']) {
+      locations.set(item['拠点コード'], item['拠点名']);
+    }
+  });
+  
+  const sortedLocations = Array.from(locations).sort((a, b) => a[0] > b[0] ? 1 : -1);
+  
+  sortedLocations.forEach(([code, name]) => {
+    const option = document.createElement('option');
+    option.value = code;
+    option.textContent = name;
+    select.appendChild(option);
+  });
+}
+
+function filterEquipmentsForEmail() {
+  const locCode = document.getElementById('email-loc-select').value;
+  const eqSelect = document.getElementById('email-eq-select');
+  
+  eqSelect.innerHTML = '<option value="">設備を選択...</option>';
+  
+  if (!locCode) return;
+  
+  const equipments = allEquipmentsForEmail.filter(e => e['拠点コード'] === locCode);
+  
+  equipments.forEach(eq => {
+    const option = document.createElement('option');
+    option.value = eq['設備ID'];
+    option.textContent = eq['設備名'] || eq['設備ID'];
+    option.dataset.spec = eq['spec'] || '';
+    eqSelect.appendChild(option);
+  });
+}
+
+function createIndividualDraft() {
+  const locSelect = document.getElementById('email-loc-select');
+  const eqSelect = document.getElementById('email-eq-select');
+  const workInput = document.getElementById('email-work-input');
+  const specInput = document.getElementById('email-spec-input');
+  
+  if (!locSelect.value || !eqSelect.value || !workInput.value) {
+    alert('拠点・設備・作業内容を入力してください');
+    return;
+  }
+  
+  const locName = locSelect.options[locSelect.selectedIndex].text;
+  const eqName = eqSelect.options[eqSelect.selectedIndex].text;
+  const locCode = locSelect.value;
+  const eqId = eqSelect.value;
+  const workType = workInput.value;
+  const spec = specInput.value;
+  
+  if (!confirm(`Gmail下書きを作成し、案件登録しますか？\n\n${locName} - ${eqName}\n作業: ${workType}`)) {
+    return;
+  }
+  
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler((result) => {
+      showLoading(false);
+      alert('✅ Gmail下書きを作成し、案件を登録しました\n\nGmailの下書きフォルダを確認してください');
+      
+      // フォームをクリア
+      document.getElementById('email-work-input').value = '';
+      document.getElementById('email-spec-input').value = '';
+      
+      // 案件管理タブへ移動
+      navigate('projects');
+    })
+    .withFailureHandler((error) => {
+      showLoading(false);
+      alert('❌ エラー: ' + error);
+    })
+    .createIndividualDraftAndProject(locCode, locName, eqId, eqName, workType, spec);
+}
+
+// ========================================
+// セクション2: ベンダー別まとめ発注
+// ========================================
+
+function loadVendorSummary() {
+  console.log('🏢 Loading vendor summary...');
+  
+  const container = document.getElementById('vendor-cards-container');
+  container.innerHTML = '<div class="loading-placeholder"><i class="fas fa-spinner fa-spin mr-2"></i>読み込み中...</div>';
+  
+  google.script.run
+    .withSuccessHandler((vendorData) => {
+      console.log('✅ Vendor data received:', vendorData);
+      renderVendorCards(vendorData);
+    })
+    .withFailureHandler((error) => {
+      console.error('❌ Vendor data error:', error);
+      container.innerHTML = '<div class="error-placeholder">データの読み込みに失敗しました</div>';
+    })
+    .getVendorGroupedAlerts();
+}
+
+function renderVendorCards(vendorData) {
+  const container = document.getElementById('vendor-cards-container');
+  container.innerHTML = '';
+  
+  let hasItems = false;
+  
+  for (const vendorKey in vendorData) {
+    const vendor = vendorData[vendorKey];
+    if (vendor.items.length === 0) continue;
+    
+    hasItems = true;
+    
+    const card = createVendorCard(vendorKey, vendor);
+    container.appendChild(card);
+  }
+  
+  if (!hasItems) {
+    container.innerHTML = '<div class="no-data-placeholder">現在、アラート中の設備はありません</div>';
+  }
+  
+  updateVendorSelection();
+}
+
+function createVendorCard(vendorKey, vendor) {
+  const card = document.createElement('div');
+  card.className = 'vendor-card';
+  card.dataset.vendor = vendorKey;
+  
+  // ヘッダー
+  const header = document.createElement('div');
+  header.className = 'vendor-card-header';
+  header.innerHTML = `
+    <div class="vendor-info">
+      <input type="checkbox" 
+             class="vendor-checkbox" 
+             id="vendor-check-${vendorKey}"
+             onchange="toggleVendorAll('${vendorKey}')">
+      <label for="vendor-check-${vendorKey}" class="vendor-label">
+        <strong>${getVendorIcon(vendorKey)} ${vendor.name}</strong>
+        <span class="badge">${vendor.items.length}件</span>
+      </label>
+    </div>
+    <button onclick="toggleVendorExpand('${vendorKey}')" class="btn-expand" id="btn-expand-${vendorKey}">
+      <i class="fas fa-chevron-down"></i> 詳細
+    </button>
+  `;
+  
+  // ボディ（アイテムリスト）
+  const body = document.createElement('div');
+  body.className = 'vendor-card-body';
+  body.id = `vendor-body-${vendorKey}`;
+  body.style.display = 'none';
+  
+  const itemsList = document.createElement('div');
+  itemsList.className = 'vendor-items-list';
+  
+  vendor.items.forEach((item, idx) => {
+    const itemDiv = createVendorItem(vendorKey, item, idx);
+    itemsList.appendChild(itemDiv);
+  });
+  
+  body.appendChild(itemsList);
+  
+  // ベンダー個別の実行ボタン
+  const actions = document.createElement('div');
+  actions.className = 'vendor-actions';
+  actions.innerHTML = `
+    <button onclick="createSingleVendorDraft('${vendorKey}')" class="btn-secondary">
+      <i class="fas fa-envelope mr-2"></i>${vendor.name}宛て（選択分のみ）Gmail下書き
+    </button>
+  `;
+  body.appendChild(actions);
+  
+  card.appendChild(header);
+  card.appendChild(body);
+  
+  return card;
+}
+
+function createVendorItem(vendorKey, item, idx) {
+  const itemId = `${item['拠点コード']}_${item['設備ID']}`;
+  const isUrgent = item['本体ステータス'] === '期限超過';
+  const statusClass = isUrgent ? 'prepare' : 'alert';
+  
+  let statusLabel = '';
+  if (item['本体ステータス'] !== '正常') {
+    statusLabel = item['本体ステータス'];
+  } else if (item['部品Aステータス'] !== '正常') {
+    statusLabel = item['部品Aステータス'];
+  } else if (item['部品Bステータス'] && item['部品Bステータス'] !== '正常') {
+    statusLabel = item['部品Bステータス'];
+  }
+  
+  const itemDiv = document.createElement('div');
+  itemDiv.className = `vendor-item ${isUrgent ? 'urgent' : ''}`;
+  itemDiv.innerHTML = `
+    <input type="checkbox" 
+           class="item-checkbox" 
+           data-vendor="${vendorKey}"
+           value="${itemId}"
+           id="item-${vendorKey}-${idx}"
+           onchange="updateVendorSelection()">
+    <label for="item-${vendorKey}-${idx}" class="item-info">
+      <div class="item-title">${item['拠点名']} - ${item['設備名']}</div>
+      <div class="item-meta">
+        ${statusLabel ? `<span class="status-badge ${statusClass}">${statusLabel}</span>` : ''}
+        ${item['nextWorkMemo'] ? `<span class="item-detail">${item['nextWorkMemo']}</span>` : ''}
+      </div>
+    </label>
+  `;
+  
+  return itemDiv;
+}
+
+function getVendorIcon(vendorKey) {
+  const icons = {
+    'TATSUNO': '⚙️',
+    'ASAHI': '🎨',
+    'SHARP': '💳',
+    'ALTIA': '💨',
+    'DAIICHI': '🛢️',
+    'OTHERS': '🔧'
+  };
+  return icons[vendorKey] || '🔧';
+}
+
+function toggleVendorAll(vendorKey) {
+  const vendorCheck = document.getElementById(`vendor-check-${vendorKey}`);
+  const itemChecks = document.querySelectorAll(`.item-checkbox[data-vendor="${vendorKey}"]`);
+  
+  itemChecks.forEach(checkbox => {
+    checkbox.checked = vendorCheck.checked;
+  });
+  
+  updateVendorSelection();
+}
+
+function toggleVendorExpand(vendorKey) {
+  const body = document.getElementById(`vendor-body-${vendorKey}`);
+  const button = document.getElementById(`btn-expand-${vendorKey}`);
+  
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    button.innerHTML = '<i class="fas fa-chevron-up"></i> 閉じる';
+  } else {
+    body.style.display = 'none';
+    button.innerHTML = '<i class="fas fa-chevron-down"></i> 詳細';
+  }
+}
+
+function updateVendorSelection() {
+  // 全体の選択カウント
+  const allChecked = document.querySelectorAll('.item-checkbox:checked');
+  const count = allChecked.length;
+  
+  document.getElementById('vendor-selected-count').textContent = `${count}件選択中`;
+  
+  // 一括実行ボタンの有効/無効
+  const btn = document.getElementById('btn-create-vendor-drafts');
+  if (btn) {
+    btn.disabled = (count === 0);
+  }
+  
+  // 各ベンダーのチェックボックス状態を更新
+  document.querySelectorAll('.vendor-checkbox').forEach(vendorCheck => {
+    const vendorKey = vendorCheck.id.replace('vendor-check-', '');
+    const itemChecks = document.querySelectorAll(`.item-checkbox[data-vendor="${vendorKey}"]`);
+    const checkedItems = Array.from(itemChecks).filter(cb => cb.checked);
+    
+    if (checkedItems.length === 0) {
+      vendorCheck.checked = false;
+      vendorCheck.indeterminate = false;
+    } else if (checkedItems.length === itemChecks.length) {
+      vendorCheck.checked = true;
+      vendorCheck.indeterminate = false;
+    } else {
+      vendorCheck.checked = false;
+      vendorCheck.indeterminate = true;
+    }
+  });
+}
+
+function selectAllVendorItems() {
+  document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = true);
+  updateVendorSelection();
+}
+
+function deselectAllVendorItems() {
+  document.querySelectorAll('.item-checkbox').forEach(cb => cb.checked = false);
+  updateVendorSelection();
+}
+
+function createSingleVendorDraft(vendorKey) {
+  const checkedItems = Array.from(
+    document.querySelectorAll(`.item-checkbox[data-vendor="${vendorKey}"]:checked`)
+  ).map(cb => cb.value);
+  
+  if (checkedItems.length === 0) {
+    alert('案件を選択してください');
+    return;
+  }
+  
+  const vendorLabel = document.querySelector(`#vendor-check-${vendorKey} + label strong`);
+  const vendorName = vendorLabel ? vendorLabel.textContent.trim().replace(/^[^\s]+\s/, '') : 'この業者';
+  
+  if (!confirm(`${vendorName}宛てのGmail下書きを作成しますか？\n\n対象: ${checkedItems.length}件`)) {
+    return;
+  }
+  
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler((result) => {
+      showLoading(false);
+      alert(`✅ ${result.message}\n\nGmailの下書きフォルダを確認してください`);
+      
+      // 作成済みの項目のチェックを外す
+      checkedItems.forEach(itemId => {
+        const checkbox = document.querySelector(`.item-checkbox[value="${itemId}"]`);
+        if (checkbox) checkbox.checked = false;
+      });
+      updateVendorSelection();
+      
+      // 案件管理タブへ移動
+      navigate('projects');
+    })
+    .withFailureHandler((error) => {
+      showLoading(false);
+      alert('❌ エラー: ' + error);
+    })
+    .createVendorDraftForSelected(vendorKey, checkedItems);
+}
+
+function createSelectedVendorDrafts() {
+  const allChecked = document.querySelectorAll('.item-checkbox:checked');
+  
+  if (allChecked.length === 0) {
+    alert('案件を選択してください');
+    return;
+  }
+  
+  // ベンダーごとにグループ化
+  const vendorGroups = {};
+  allChecked.forEach(checkbox => {
+    const vendorKey = checkbox.dataset.vendor;
+    if (!vendorGroups[vendorKey]) vendorGroups[vendorKey] = [];
+    vendorGroups[vendorKey].push(checkbox.value);
+  });
+  
+  const vendorCount = Object.keys(vendorGroups).length;
+  const totalCount = allChecked.length;
+  
+  if (!confirm(`${vendorCount}社に対して、合計${totalCount}件のGmail下書きを作成しますか？`)) {
+    return;
+  }
+  
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler((result) => {
+      showLoading(false);
+      alert(`✅ ${result.message}\n\nGmailの下書きフォルダを確認してください`);
+      
+      // すべてのチェックを外す
+      deselectAllVendorItems();
+      
+      // 案件管理タブへ移動
+      navigate('projects');
+    })
+    .withFailureHandler((error) => {
+      showLoading(false);
+      alert('❌ エラー: ' + error);
+    })
+    .createMultipleVendorDrafts(vendorGroups);
+}
+
+// ========================================
+// セクション3: カスタムメール作成
+// ========================================
+
+function createCustomDraft() {
+  const to = document.getElementById('custom-to').value;
+  const subject = document.getElementById('custom-subject').value;
+  const body = document.getElementById('custom-body').value;
+  
+  if (!to || !subject || !body) {
+    alert('すべての項目を入力してください');
+    return;
+  }
+  
+  if (!confirm('Gmail下書きを作成しますか？')) {
+    return;
+  }
+  
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler((result) => {
+      showLoading(false);
+      alert('✅ Gmail下書きを作成しました\n\nGmailの下書きフォルダを確認してください');
+      
+      // フォームをクリア
+      document.getElementById('custom-body').value = '';
+    })
+    .withFailureHandler((error) => {
+      showLoading(false);
+      alert('❌ エラー: ' + error);
+    })
+    .createCustomGmailDraft(to, subject, body);
+}
 </script>
