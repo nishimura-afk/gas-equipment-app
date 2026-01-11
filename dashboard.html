@@ -202,14 +202,14 @@
 function dashboardInit(f=false) {
   if(!f && window.g_cache.dashboard) { 
     renderDashboard(window.g_cache.dashboard); 
-    loadAllBulkOrderAlerts();  // ← この行を追加
+    loadAllBulkOrderAlerts();
     return; 
   }
   showLoading(true);
   google.script.run.withSuccessHandler(d => { 
     window.g_cache.dashboard=d; 
     renderDashboard(d); 
-    loadAllBulkOrderAlerts();  // ← この行を追加
+    loadAllBulkOrderAlerts();
   }).getDashboardData();
 }
 
@@ -263,170 +263,160 @@ function renderDashboard(data) {
   if(mnCount===0) minorT.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-gray-400 text-xs">対応が必要な消耗品交換はありません</td></tr>';
 }
 
-// 全ての一括発注アラート読み込み
+// 全ての一括発注アラート読み込み（ノズルカバー + その他4種類）
 function loadAllBulkOrderAlerts() {
-  // ノズルカバー交換アラートを読み込む
-  loadNozzleCoverAlert();
+  const container = document.getElementById('bulk-order-alerts');
+  if (!container) return;
   
-  // その他の一括発注アラートを読み込む
-  google.script.run
-    .withSuccessHandler(function(allInfo) {
-      window.bulkOrderDataMap = {};
-      window.bulkOrderData = allInfo;
-      
-      const container = document.getElementById('bulk-order-alerts');
-      if (!container) return;
-      
-      container.innerHTML = '';
-      
-      const hasAnyAlert = allInfo.some(info => info.hasAlert);
-      
-      if (!hasAnyAlert) {
-        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
-        return;
-      }
-      
-      allInfo.forEach(function(info) {
-        const equipmentId = info.config.id;
-        window.bulkOrderDataMap[equipmentId] = info;
-        
-        if (!info.hasAlert) return;
-        
-        const div = document.createElement('div');
-        div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition';
-        
-        const today = new Date();
-        const currentMonth = today.getMonth() + 1;
-        const targetYear = info.targetYear || ((currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1);
-        
-        let storeList = '';
-        if (info.targetStores.length <= 5) {
-          storeList = info.targetStores.map(s => s.name).join(', ');
-        } else {
-          storeList = info.targetStores.slice(0, 3).map(s => s.name).join(', ') + ' 他' + (info.targetStores.length - 3) + '店舗';
-        }
-        
-        div.innerHTML = `
-          <div class="flex items-start justify-between mb-2">
-            <div class="flex-1">
-              <div class="text-base font-bold text-blue-900 mb-1">
-                <span class="text-xl mr-2">${info.config.emoji}</span>
-                ${info.config.name} (${targetYear}年4月実施予定) - ${info.targetCount}店舗
-              </div>
-              <div class="text-sm text-blue-700 ml-7">
-                対象: ${storeList}
-              </div>
-            </div>
-          </div>
-          <div class="flex gap-2 ml-7 mt-2">
-            <button onclick="showBulkEmailDraft('${equipmentId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
-              <i class="fas fa-envelope mr-1"></i>メール下書き
-            </button>
-            <button onclick="createBulkOrderGmailDraftFor('${equipmentId}')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
-              <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
-            </button>
-            <button onclick="createBulkOrderProjectFor('${equipmentId}')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
-              <i class="fas fa-clipboard-list mr-1"></i>案件作成
-            </button>
-          </div>
-        `;
-        
-        container.appendChild(div);
-      });
-    })
-    .withFailureHandler(function(error) {
-      console.error('一括発注情報の取得に失敗:', error);
-      const container = document.getElementById('bulk-order-alerts');
-      if (container) {
-        container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">一括発注情報の読み込みに失敗しました</div>';
-      }
-    })
-    .getAllBulkOrderInfo();
-}
-
-// ノズルカバー交換アラートを読み込んで表示
-function loadNozzleCoverAlert() {
-  console.log('=== loadNozzleCoverAlert 開始 ===');
+  container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">読み込み中...</div>';
   
+  // ノズルカバー情報を取得
   google.script.run
-    .withSuccessHandler(function(info) {
-      console.log('getNozzleCoverInfo 成功:', info);
-      
-      if (!info) {
-        console.error('info が null です');
-        return;
-      }
-      
-      console.log('hasAlert:', info.hasAlert);
-      console.log('targetCount:', info.targetCount);
-      
-      const container = document.getElementById('bulk-order-alerts');
-      if (!container) {
-        console.error('bulk-order-alerts 要素が見つかりません');
-        return;
-      }
-      
-      // 既存の「読み込み中...」をクリア
-      container.innerHTML = '';
-      
-      if (!info.hasAlert || info.targetCount === 0) {
-        console.log('アラートなし: 対象店舗が0件');
-        container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
-        return;
-      }
-      
-      console.log('アラート表示: 対象店舗' + info.targetCount + '件');
-      
-      const div = document.createElement('div');
-      div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition bg-gradient-to-r from-amber-50 to-yellow-50';
-      
-      let storeList = '';
-      if (info.targetStores && info.targetStores.length > 0) {
-        if (info.targetStores.length <= 8) {
-          storeList = info.targetStores.map(function(s) { return s.name; }).join(', ');
-        } else {
-          storeList = info.targetStores.slice(0, 5).map(function(s) { return s.name; }).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
-        }
-      }
-      
-      div.innerHTML = `
-        <div class="flex items-start justify-between mb-2">
-          <div class="flex-1">
-            <div class="text-base font-bold text-blue-900 mb-1">
-              <span class="text-xl mr-2">${info.config.emoji}</span>
-              ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
-            </div>
-            <div class="text-sm text-blue-700 ml-7 mt-1">
-              対象: ${storeList}
-            </div>
-          </div>
-        </div>
-        <div class="flex gap-2 ml-7 mt-2">
-          <button onclick="showNozzleCoverEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
-            <i class="fas fa-envelope mr-1"></i>メール下書き
-          </button>
-          <button onclick="createNozzleCoverGmailDraft()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
-            <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
-          </button>
-          <button onclick="createNozzleCoverProject()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
-            <i class="fas fa-clipboard-list mr-1"></i>案件作成
-          </button>
-        </div>
-      `;
-      
-      container.insertBefore(div, container.firstChild);
-      window.nozzleCoverData = info;
-      
-      console.log('=== 表示完了 ===');
+    .withSuccessHandler(function(nozzleInfo) {
+      // その他の一括発注情報を取得
+      google.script.run
+        .withSuccessHandler(function(allInfo) {
+          window.bulkOrderDataMap = {};
+          window.nozzleCoverData = nozzleInfo;
+          
+          container.innerHTML = '';
+          
+          let hasAnyAlert = false;
+          
+          // ノズルカバーを表示
+          if (nozzleInfo && nozzleInfo.hasAlert && nozzleInfo.targetCount > 0) {
+            hasAnyAlert = true;
+            const div = createBulkAlertDiv(nozzleInfo, 'nozzle');
+            container.appendChild(div);
+          }
+          
+          // その他の4種類を表示
+          allInfo.forEach(function(info) {
+            const equipmentId = info.config.id;
+            window.bulkOrderDataMap[equipmentId] = info;
+            
+            if (info.hasAlert) {
+              hasAnyAlert = true;
+              const div = createBulkAlertDiv(info, 'standard');
+              container.appendChild(div);
+            }
+          });
+          
+          if (!hasAnyAlert) {
+            container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
+          }
+        })
+        .withFailureHandler(function(error) {
+          console.error('一括発注情報の取得に失敗:', error);
+          container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">一括発注情報の読み込みに失敗しました</div>';
+        })
+        .getAllBulkOrderInfo();
     })
     .withFailureHandler(function(error) {
       console.error('ノズルカバー情報の取得に失敗:', error);
-      const container = document.getElementById('bulk-order-alerts');
-      if (container) {
-        container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">読み込みに失敗しました: ' + error.message + '</div>';
-      }
+      container.innerHTML = '<div class="p-4 text-center text-red-400 text-sm">読み込みに失敗しました</div>';
     })
     .getNozzleCoverInfo();
+}
+
+// 一括発注アラート要素を作成
+function createBulkAlertDiv(info, type) {
+  const div = document.createElement('div');
+  div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition';
+  
+  let storeList = '';
+  if (info.targetStores && info.targetStores.length > 0) {
+    if (info.targetStores.length <= 8) {
+      storeList = info.targetStores.map(function(s) { return s.name; }).join(', ');
+    } else {
+      storeList = info.targetStores.slice(0, 5).map(function(s) { return s.name; }).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
+    }
+  }
+  
+  const equipmentId = info.config.id;
+  const isNozzle = (type === 'nozzle');
+  
+  const buttons = isNozzle ? `
+    <button onclick="showNozzleCoverEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope mr-1"></i>メール下書き
+    </button>
+    <button onclick="createNozzleCoverGmailDraft()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
+    </button>
+    <button onclick="createNozzleCoverProject()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-clipboard-list mr-1"></i>案件作成
+    </button>
+  ` : `
+    <button onclick="showBulkEmailDraft('${equipmentId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope mr-1"></i>メール下書き
+    </button>
+    <button onclick="createBulkOrderGmailDraftFor('${equipmentId}')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
+    </button>
+    <button onclick="createBulkOrderProjectFor('${equipmentId}')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-clipboard-list mr-1"></i>案件作成
+    </button>
+  `;
+  
+  div.innerHTML = `
+    <div class="flex items-start justify-between mb-2">
+      <div class="flex-1">
+        <div class="text-base font-bold text-blue-900 mb-1">
+          <span class="text-xl mr-2">${info.config.emoji}</span>
+          ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
+        </div>
+        <div class="text-sm text-blue-700 ml-7 mt-1">
+          対象: ${storeList}
+        </div>
+      </div>
+    </div>
+    <div class="flex gap-2 ml-7 mt-2">
+      ${buttons}
+    </div>
+  `;
+  
+  return div;
+}
+
+// ノズルカバー交換メール下書き表示
+function showNozzleCoverEmailDraft() {
+  if (!window.nozzleCoverData) {
+    alert('データを読み込み中です');
+    return;
+  }
+  
+  const info = window.nozzleCoverData;
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
+  
+  const content = document.createElement('div');
+  content.className = 'bg-white rounded-lg shadow-2xl';
+  content.style.cssText = 'max-width: 700px; max-height: 85vh; width: 90%;';
+  
+  content.innerHTML = `
+    <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg">
+      <h2 class="text-xl font-bold"><i class="fas fa-envelope mr-2"></i>📦 ${info.config.name} - メール下書き</h2>
+    </div>
+    <div class="p-6">
+      <textarea id="nozzle-email-draft-text" readonly class="w-full h-96 font-mono text-sm p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" style="resize: none;">${info.emailDraft}</textarea>
+      <div class="mt-4 flex gap-3 justify-end">
+        <button onclick="copyNozzleEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-copy mr-2"></i>コピー
+        </button>
+        <button onclick="closeNozzleModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-times mr-2"></i>閉じる
+        </button>
+      </div>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  window.currentNozzleModal = modal;
+  
+  modal.onclick = function(e) {
+    if (e.target === modal) closeNozzleModal();
+  };
 }
 
 // ノズルカバー交換メール下書き表示
