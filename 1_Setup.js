@@ -325,7 +325,8 @@ function getNozzleCoverTargetStores() {
     
     // PARTS-PUMP-1Y、PUMP-G-01、PUMP-K-01の日付を収集
     // 複数の設備がある場合は、最も新しい日付を保持
-    if (installDate instanceof Date && !isNaN(installDate.getTime())) {
+    // 未来の日付（today より後）は除外
+    if (installDate instanceof Date && !isNaN(installDate.getTime()) && installDate <= today) {
       if (eqId === 'PARTS-PUMP-1Y') {
         if (!storeDates[locCode].partsPump1YDate || installDate > storeDates[locCode].partsPump1YDate) {
           storeDates[locCode].partsPump1YDate = installDate;
@@ -349,6 +350,7 @@ function getNozzleCoverTargetStores() {
     var store = storeDates[locCode];
     
     // 3つの日付のうち最も新しい日付を見つける
+    // 未来の日付（today より後）は除外
     var latestDate = null;
     var dates = [
       store.partsPump1YDate,
@@ -358,7 +360,7 @@ function getNozzleCoverTargetStores() {
     
     for (var j = 0; j < dates.length; j++) {
       var date = dates[j];
-      if (date instanceof Date && !isNaN(date.getTime())) {
+      if (date instanceof Date && !isNaN(date.getTime()) && date <= today) {
         if (!latestDate || date > latestDate) {
           latestDate = date;
         }
