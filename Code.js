@@ -147,11 +147,12 @@ function generateQuoteRequest(locName, eqName, workType) {
          `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
 }
 
-// --- Code.gs の末尾に追記 ---
+// =================================================================
+// ★以下をCode.gsの末尾に追加してください（動作確認用）★
+// =================================================================
 
-// 強制的にダミーデータを返すデバッグ用関数
 function getNozzleCoverInfo() {
-  Logger.log('=== Code.gs: getNozzleCoverInfo FORCED DEBUG ===');
+  console.log('=== Code.gs: getNozzleCoverInfo FORCED DEBUG ===');
   return {
     hasAlert: true,
     targetCount: 999,
@@ -168,7 +169,7 @@ function getNozzleCoverInfo() {
 }
 
 function getAllBulkOrderInfo() {
-  Logger.log('=== Code.gs: getAllBulkOrderInfo FORCED DEBUG ===');
+  console.log('=== Code.gs: getAllBulkOrderInfo FORCED DEBUG ===');
   return [
     {
       hasAlert: true,
