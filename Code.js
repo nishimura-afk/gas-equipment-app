@@ -146,3 +146,42 @@ function generateQuoteRequest(locName, eqName, workType) {
          `\n` + 
          `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
 }
+
+// --- Code.gs の末尾に追記 ---
+
+// 強制的にダミーデータを返すデバッグ用関数
+function getNozzleCoverInfo() {
+  Logger.log('=== Code.gs: getNozzleCoverInfo FORCED DEBUG ===');
+  return {
+    hasAlert: true,
+    targetCount: 999,
+    targetYear: 2026,
+    emailDraft: "これはCode.gsから強制的に返されたデバッグデータです。",
+    config: {
+      id: "PARTS-PUMP-1Y",
+      name: "ノズルカバー（デバッグ）",
+      emoji: "🐞",
+      vendor: "タツノ"
+    },
+    targetStores: [{name: "デバッグ店A"}, {name: "デバッグ店B"}]
+  };
+}
+
+function getAllBulkOrderInfo() {
+  Logger.log('=== Code.gs: getAllBulkOrderInfo FORCED DEBUG ===');
+  return [
+    {
+      hasAlert: true,
+      targetCount: 123,
+      targetYear: 2026,
+      emailDraft: "これはCode.gsから強制的に返されたデバッグデータです。",
+      config: {
+        id: "DEBUG-BULK",
+        name: "一括発注（デバッグ）",
+        emoji: "🐛",
+        vendor: "タツノ"
+      },
+      targetStores: [{name: "デバッグ店1"}]
+    }
+  ];
+}
