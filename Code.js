@@ -178,30 +178,30 @@ function getNozzleCoverTargetStores() {
     if (!storeDates[locCode]) storeDates[locCode] = { code: locCode, name: locName, dates: [] };
     
     if (installDate instanceof Date && !isNaN(installDate.getTime()) && installDate <= today) {
-      if (eqId === 'PARTS-PUMP-1Y' || eqId.includes('PUMP-G-01')) {
-        storeDates[locCode].dates.push(installDate);
-      }
+    　if (eqId === 'PARTS-PUMP-1Y' || eqId.includes('PUMP-G-01')) {
+  storeDates[locCode].dates.push(installDate);
+}  
     }
   }
   
   // targetYear の 4月1日を基準日とする
-  var targetApril = new Date(targetYear, 3, 1);
+var targetApril = new Date(targetYear, 3, 1);
+
+var result = [];
+for (var locCode in storeDates) {
+  var store = storeDates[locCode];
+  if (store.dates.length === 0) continue;
+  var latestDate = new Date(Math.max.apply(null, store.dates));
   
-  var result = [];
-  for (var locCode in storeDates) {
-    var store = storeDates[locCode];
-    if (store.dates.length === 0) continue;
-    var latestDate = new Date(Math.max.apply(null, store.dates));
-    
-    // 前回実施日から1年後を計算
-    var oneYearLater = new Date(latestDate);
-    oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
-    
-    // 1年後が targetYear の 4月1日以前なら対象
-    if (oneYearLater <= targetApril) {
-      result.push({ code: store.code, name: store.name, installDate: latestDate, targetYear: targetYear });
-    }
+  // 前回実施日から1年後を計算
+  var oneYearLater = new Date(latestDate);
+  oneYearLater.setFullYear(oneYearLater.getFullYear() + 1);
+  
+  // 1年後が targetYear の 4月1日以前なら対象
+  if (oneYearLater <= targetApril) {
+    result.push({ code: store.code, name: store.name, installDate: latestDate, targetYear: targetYear });
   }
+}
   result.sort(function(a, b) { return a.code > b.code ? 1 : -1; });
   return result;
 }

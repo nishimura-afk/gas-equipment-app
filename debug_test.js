@@ -16,3 +16,15 @@ function debugNozzleCover() {
   Logger.log('targetCount: ' + info.targetCount);
   Logger.log('targetYear: ' + info.targetYear);
 }
+
+function showNozzleCoverFunction() {
+  Logger.log(getNozzleCoverTargetStores.toString());
+}
+
+function testNozzleCover() {
+  var stores = getNozzleCoverTargetStores();
+  Logger.log('対象店舗数: ' + stores.length);
+  stores.forEach(function(s) {
+    Logger.log(s.code + ' ' + s.name + ' - ' + Utilities.formatDate(s.installDate, 'JST', 'yyyy/MM/dd'));
+  });
+}
