@@ -178,9 +178,9 @@ function getNozzleCoverTargetStores() {
     if (!storeDates[locCode]) storeDates[locCode] = { code: locCode, name: locName, dates: [] };
     
     if (installDate instanceof Date && !isNaN(installDate.getTime()) && installDate <= today) {
-    　if (eqId === 'PARTS-PUMP-1Y' || eqId.includes('PUMP-G-01')) {
-  storeDates[locCode].dates.push(installDate);
-}  
+      if (eqId === 'PARTS-PUMP-1Y' || eqId.includes('PUMP-G-01')) {
+        storeDates[locCode].dates.push(installDate);
+      }
     }
   }
   
