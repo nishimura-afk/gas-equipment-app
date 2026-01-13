@@ -192,6 +192,8 @@ function loadAllBulkOrderAlerts() {
           // ノズルカバーを表示
           if (nozzleInfo && nozzleInfo.hasAlert) {
             hasAnyAlert = true;
+            // ノズルカバーのデータも bulkOrderDataMap に追加（showBulkEmailDraft で使用）
+            window.bulkOrderDataMap['PARTS-PUMP-1Y'] = nozzleInfo;
             try {
               const div = createBulkAlertDiv(nozzleInfo, 'nozzle');
               container.appendChild(div);
@@ -246,19 +248,8 @@ function createBulkAlertDiv(info, type) {
   }
   
   const equipmentId = info.config.id;
-  const isNozzle = (type === 'nozzle');
   
-  const buttons = isNozzle ? `
-    <button onclick="showNozzleCoverEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-envelope mr-1"></i>メール下書き
-    </button>
-    <button onclick="createNozzleCoverGmailDraft()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
-    </button>
-    <button onclick="createNozzleCoverProject()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-clipboard-list mr-1"></i>案件作成
-    </button>
-  ` : `
+  const buttons = `
     <button onclick="showBulkEmailDraft('${equipmentId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
       <i class="fas fa-envelope mr-1"></i>メール下書き
     </button>
