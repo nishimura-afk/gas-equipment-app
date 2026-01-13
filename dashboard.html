@@ -16,9 +16,9 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm text-left">
         <thead class="bg-indigo-100 text-indigo-800">
-          <tr><th class="p-2">拠点</th><th class="p-2">設備名</th><th class="p-2">期限</th></tr>
+          <tr><th class="p-2">拠点</th><th class="p-2">設備名</th><th class="p-2">期限</th><th class="p-2">アクション</th></tr>
         </thead>
-        <tbody id="table-legal" class="divide-y divide-indigo-100"><tr><td colspan="3" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
+        <tbody id="table-legal" class="divide-y divide-indigo-100"><tr><td colspan="4" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -129,7 +129,25 @@ function renderDashboard(data) {
         let statusLabel = i['部品Aステータス'];
         let statusColor = (statusLabel === '期限超過') ? 'text-red-600' : 'text-indigo-600';
         let status = `<span class="font-bold ${statusColor}">${statusLabel}</span>`;
-        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td><td class="p-2"></td>`;
+        
+        // ボタン追加
+        let actionBtn = `
+          <button onclick="showIndividualEmailDraft('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${i['設備名']}', '法定検査')" 
+                  class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs mr-1">
+            <i class="fas fa-envelope mr-1"></i>メール
+          </button>
+          <button onclick="createIndividualProject('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${i['設備名']}', '法定検査')" 
+                  class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs">
+            <i class="fas fa-clipboard-list mr-1"></i>案件化
+          </button>
+        `;
+        
+        tr.innerHTML = `
+          <td class="p-2 font-bold">${i['拠点名']}</td>
+          <td class="p-2">${i['設備名']}</td>
+          <td class="p-2">${status}</td>
+          <td class="p-2">${actionBtn}</td>
+        `;
         legalT.appendChild(tr);
       }
       else if (category === '本体更新' || category === '美観' || category === 'メンテ') {
@@ -139,14 +157,40 @@ function renderDashboard(data) {
         let status = `<span class="font-bold ${i['本体ステータス']==='期限超過'?'text-rose-600':'text-amber-600'}">${i['本体ステータス']}</span>`;
         if(i['subsidyAlert']) status += `<br><span class="text-xs text-white bg-red-500 px-1 rounded">${i['subsidyAlert']}</span>`;
         
-        // エアコンの場合は特別なボタンを表示
+        // ボタン作成（エアコンは電話依頼、その他はメール）
         let actionBtn = '';
         const eqName = i['設備名'] || '';
+        
         if (eqName.includes('エアコン')) {
-          actionBtn = `<button onclick="createPhoneCallProject('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${eqName}')" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs">📞 電話依頼＋案件化</button>`;
+          actionBtn = `
+            <button onclick="createPhoneCallProject('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${eqName}')" 
+                    class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs mr-1">
+              <i class="fas fa-phone mr-1"></i>電話依頼
+            </button>
+            <button onclick="createIndividualProject('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${eqName}', '本体更新')" 
+                    class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs">
+              <i class="fas fa-clipboard-list mr-1"></i>案件化
+            </button>
+          `;
+        } else {
+          actionBtn = `
+            <button onclick="showIndividualEmailDraft('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${eqName}', '本体更新')" 
+                    class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs mr-1">
+              <i class="fas fa-envelope mr-1"></i>メール
+            </button>
+            <button onclick="createIndividualProject('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${eqName}', '本体更新')" 
+                    class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs">
+              <i class="fas fa-clipboard-list mr-1"></i>案件化
+            </button>
+          `;
         }
         
-        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td><td class="p-2">${actionBtn}</td>`;
+        tr.innerHTML = `
+          <td class="p-2 font-bold">${i['拠点名']}</td>
+          <td class="p-2">${i['設備名']}</td>
+          <td class="p-2">${status}</td>
+          <td class="p-2">${actionBtn}</td>
+        `;
         majorT.appendChild(tr);
       }
     });
@@ -544,5 +588,123 @@ function createPhoneCallProject(locCode, eqId, locName, eqName) {
       alert('❌ エラー: ' + error);
     })
     .createPhoneCallProject(locCode, eqId, eqName, memo);
+}
+
+// 個別案件のメール下書きモーダル表示
+function showIndividualEmailDraft(locCode, eqId, locName, eqName, workType) {
+  const subject = '【見積依頼】見積り依頼の件';
+  let body = 'お世話になっております。\n\n';
+  body += '以下の設備につきまして、見積もりをお願いしたく存じます。\n\n';
+  body += `■ セルフィックス${locName}\n`;
+  body += `・設備: ${eqName}\n`;
+  body += `・作業内容: ${workType}\n\n`;
+  body += '--------------------------------------------------\n';
+  body += '日商有田株式会社\n西村\n';
+  body += '--------------------------------------------------';
+  
+  showEmailDraftModal(subject, body, locCode, eqId, locName, eqName, workType);
+}
+
+// メール下書きモーダル表示（共通）
+function showEmailDraftModal(subject, body, locCode, eqId, locName, eqName, workType) {
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
+  
+  const content = document.createElement('div');
+  content.className = 'bg-white rounded-lg shadow-2xl';
+  content.style.cssText = 'max-width: 700px; max-height: 85vh; width: 90%;';
+  
+  content.innerHTML = `
+    <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg">
+      <h2 class="text-xl font-bold"><i class="fas fa-envelope mr-2"></i>メール下書き - ${locName}</h2>
+    </div>
+    <div class="p-6">
+      <textarea id="individual-email-draft" readonly 
+                class="w-full h-96 font-mono text-sm p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" 
+                style="resize: none;">${body}</textarea>
+      <div class="mt-4 flex gap-3 justify-end">
+        <button onclick="copyIndividualEmailDraft()" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-copy mr-2"></i>コピー
+        </button>
+        <button onclick="createIndividualGmailDraft('${locCode}', '${eqId}', '${locName}', '${eqName}', '${workType}')" 
+                class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-envelope-open mr-2"></i>Gmail下書き作成
+        </button>
+        <button onclick="closeIndividualEmailModal()" 
+                class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-times mr-2"></i>閉じる
+        </button>
+      </div>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  window.currentIndividualModal = modal;
+  
+  modal.onclick = function(e) {
+    if (e.target === modal) closeIndividualEmailModal();
+  };
+}
+
+// メール下書きコピー
+function copyIndividualEmailDraft() {
+  const textarea = document.getElementById('individual-email-draft');
+  textarea.select();
+  textarea.setSelectionRange(0, 99999);
+  
+  try {
+    document.execCommand('copy');
+    alert('✅ メール下書きをクリップボードにコピーしました');
+  } catch (err) {
+    alert('❌ コピーに失敗しました。手動でコピーしてください。');
+  }
+}
+
+// モーダルを閉じる
+function closeIndividualEmailModal() {
+  if (window.currentIndividualModal) {
+    document.body.removeChild(window.currentIndividualModal);
+    window.currentIndividualModal = null;
+  }
+}
+
+// Gmail下書き作成
+function createIndividualGmailDraft(locCode, eqId, locName, eqName, workType) {
+  if (!confirm('Gmailの下書きを作成しますか？')) return;
+  
+  closeIndividualEmailModal();
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      alert('✅ Gmail下書きを作成しました\n\nGmailの下書きフォルダを確認してください。');
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      alert('❌ Gmail下書き作成に失敗しました\n\n' + error);
+    })
+    .createIndividualGmailDraft(locCode, eqId, locName, eqName, workType);
+}
+
+// 個別案件作成
+function createIndividualProject(locCode, eqId, locName, eqName, workType) {
+  if (!confirm(`案件を作成しますか？\n\nセルフィックス${locName}\n${eqName}\n作業: ${workType}`)) return;
+  
+  showLoading(true);
+  
+  google.script.run
+    .withSuccessHandler(function(result) {
+      showLoading(false);
+      alert(`✅ 案件を作成しました\n\n案件ID: ${result.projectId}`);
+      navigate('projects');
+    })
+    .withFailureHandler(function(error) {
+      showLoading(false);
+      alert('❌ 案件作成に失敗しました\n\n' + error);
+    })
+    .createIndividualProject(locCode, eqId, locName, eqName, workType);
 }
 </script>

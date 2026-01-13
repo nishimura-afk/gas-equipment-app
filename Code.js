@@ -371,6 +371,60 @@ function createPhoneCallProject(locCode, eqId, eqName, memo) {
 }
 
 /**
+ * 個別案件のGmail下書き作成
+ */
+function createIndividualGmailDraft(locCode, eqId, locName, eqName, workType) {
+  try {
+    var subject = '【見積依頼】見積り依頼の件';
+    var body = 'お世話になっております。\n\n';
+    body += '以下の設備につきまして、見積もりをお願いしたく存じます。\n\n';
+    body += '■ セルフィックス' + locName + '\n';
+    body += '・設備: ' + eqName + '\n';
+    body += '・作業内容: ' + workType + '\n\n';
+    body += '--------------------------------------------------\n';
+    body += '日商有田株式会社\n西村\n';
+    body += '--------------------------------------------------';
+    
+    GmailApp.createDraft('', subject, body, {
+      from: 'nishimura@selfix.jp'
+    });
+    
+    return { success: true };
+  } catch (e) {
+    throw new Error('Gmail下書き作成エラー: ' + e.message);
+  }
+}
+
+/**
+ * 個別案件作成
+ */
+function createIndividualProject(locCode, eqId, locName, eqName, workType) {
+  try {
+    var config = getConfig();
+    var scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+    var uniqueId = Utilities.getUuid();
+    
+    scheduleSheet.appendRow([
+      uniqueId,
+      locCode,
+      eqId,
+      workType,
+      '',
+      config.PROJECT_STATUS.ESTIMATE_REQ,
+      '',
+      ''
+    ]);
+    
+    return {
+      success: true,
+      projectId: uniqueId
+    };
+  } catch (e) {
+    throw new Error('案件作成エラー: ' + e.message);
+  }
+}
+
+/**
  * 一括発注のGmail下書き作成（汎用）
  */
 function createBulkOrderGmailDraft(equipmentId) {
@@ -379,6 +433,40 @@ function createBulkOrderGmailDraft(equipmentId) {
     var today = new Date();
     var targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
     
+    // ノズルカバーの場合
+    if (equipmentId === 'PARTS-PUMP-1Y') {
+      var targetStores = getNozzleCoverTargetStores();
+      
+      if (targetStores.length === 0) {
+        return { success: false, message: '対象店舗がありません' };
+      }
+      
+      var subject = '【見積依頼】見積り依頼の件';
+      var body = 'お世話になっております。\n\n';
+      body += targetYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n';
+      body += '【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
+      
+      for (var i = 0; i < targetStores.length; i++) {
+        body += '- セルフィックス' + targetStores[i].name + '\n';
+      }
+      
+      body += '\n--------------------------------------------------\n';
+      body += '日商有田株式会社\n西村\n';
+      body += '--------------------------------------------------';
+      
+      GmailApp.createDraft('', subject, body, {
+        from: 'nishimura@selfix.jp'
+      });
+      
+      return {
+        success: true,
+        message: 'Gmail下書きを作成しました',
+        subject: subject,
+        recipient: 'タツノ宛て'
+      };
+    }
+    
+    // その他の一括発注
     var configItem = null;
     for (var i = 0; i < configs.length; i++) {
       if (configs[i].id === equipmentId) {
@@ -438,6 +526,37 @@ function createBulkOrderProject(equipmentId) {
     var today = new Date();
     var targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
     
+    // ノズルカバーの場合
+    if (equipmentId === 'PARTS-PUMP-1Y') {
+      var targetStores = getNozzleCoverTargetStores();
+      
+      if (targetStores.length === 0) {
+        return { success: false, message: '対象店舗がありません' };
+      }
+      
+      var scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+      var uniqueId = Utilities.getUuid();
+      
+      scheduleSheet.appendRow([
+        uniqueId,
+        'BULK',
+        'PARTS-PUMP-1Y',
+        'ノズルカバー交換一括発注(' + targetYear + '年度)',
+        '',
+        config.PROJECT_STATUS.ESTIMATE_REQ,
+        '',
+        'タツノ'
+      ]);
+      
+      return {
+        success: true,
+        projectId: uniqueId,
+        equipmentName: 'ノズルカバー交換',
+        targetCount: targetStores.length
+      };
+    }
+    
+    // その他の一括発注
     var configItem = null;
     for (var i = 0; i < configs.length; i++) {
       if (configs[i].id === equipmentId) {
