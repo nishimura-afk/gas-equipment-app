@@ -224,6 +224,9 @@ function loadAllBulkOrderAlerts() {
           // ノズルカバーを表示
           if (nozzleInfo && nozzleInfo.hasAlert) {
             hasAnyAlert = true;
+            // ノズルカバーのデータも bulkOrderDataMap に追加（createBulkOrderProjectFor で使用）
+            window.bulkOrderDataMap = window.bulkOrderDataMap || {};
+            window.bulkOrderDataMap['PARTS-PUMP-1Y'] = nozzleInfo;
             try {
               const div = createBulkAlertDiv(nozzleInfo, 'nozzle');
               container.appendChild(div);
@@ -278,26 +281,15 @@ function createBulkAlertDiv(info, type) {
   }
   
   const equipmentId = info.config.id;
-  const isNozzle = (type === 'nozzle');
   
-  const buttons = isNozzle ? `
-    <button onclick="showNozzleCoverEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+  // ノズルカバー用と標準用で統一
+  const buttons = `
+    <button onclick="showBulkEmailDraftWithGmail('${equipmentId}')" 
+            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
       <i class="fas fa-envelope mr-1"></i>メール下書き
     </button>
-    <button onclick="createNozzleCoverGmailDraft()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
-    </button>
-    <button onclick="createNozzleCoverProject()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-clipboard-list mr-1"></i>案件作成
-    </button>
-  ` : `
-    <button onclick="showBulkEmailDraft('${equipmentId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-envelope mr-1"></i>メール下書き
-    </button>
-    <button onclick="createBulkOrderGmailDraftFor('${equipmentId}')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
-    </button>
-    <button onclick="createBulkOrderProjectFor('${equipmentId}')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+    <button onclick="createBulkOrderProjectFor('${equipmentId}')" 
+            class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
       <i class="fas fa-clipboard-list mr-1"></i>案件作成
     </button>
   `;
@@ -321,68 +313,6 @@ function createBulkAlertDiv(info, type) {
   return div;
 }
 
-// ノズルカバー交換メール下書き表示
-function showNozzleCoverEmailDraft() {
-  if (!window.nozzleCoverData) {
-    alert('データを読み込み中です');
-    return;
-  }
-  
-  const info = window.nozzleCoverData;
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
-  
-  const content = document.createElement('div');
-  content.className = 'bg-white rounded-lg shadow-2xl';
-  content.style.cssText = 'max-width: 700px; max-height: 85vh; width: 90%;';
-  
-  content.innerHTML = `
-    <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg">
-      <h2 class="text-xl font-bold"><i class="fas fa-envelope mr-2"></i>📦 ${info.config.name} - メール下書き</h2>
-    </div>
-    <div class="p-6">
-      <textarea id="nozzle-email-draft-text" readonly class="w-full h-96 font-mono text-sm p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" style="resize: none;">${info.emailDraft}</textarea>
-      <div class="mt-4 flex gap-3 justify-end">
-        <button onclick="copyNozzleEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
-          <i class="fas fa-copy mr-2"></i>コピー
-        </button>
-        <button onclick="closeNozzleModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
-          <i class="fas fa-times mr-2"></i>閉じる
-        </button>
-      </div>
-    </div>
-  `;
-  
-  modal.appendChild(content);
-  document.body.appendChild(modal);
-  window.currentNozzleModal = modal;
-  
-  modal.onclick = function(e) {
-    if (e.target === modal) closeNozzleModal();
-  };
-}
-
-// ノズルカバー交換メール下書きをコピー
-function copyNozzleEmailDraft() {
-  const textarea = document.getElementById('nozzle-email-draft-text');
-  textarea.select();
-  textarea.setSelectionRange(0, 99999);
-  
-  try {
-    document.execCommand('copy');
-    alert('✅ メール下書きをクリップボードにコピーしました');
-  } catch (err) {
-    alert('❌ コピーに失敗しました。手動でコピーしてください。');
-  }
-}
-
-// ノズルカバー交換モーダルを閉じる
-function closeNozzleModal() {
-  if (window.currentNozzleModal) {
-    document.body.removeChild(window.currentNozzleModal);
-    window.currentNozzleModal = null;
-  }
-}
 
 // ノズルカバー交換Gmail下書き作成
 function createNozzleCoverGmailDraft() {
@@ -445,96 +375,36 @@ function createBulkOrderGmailDraftFor(equipmentId) {
     .createBulkOrderGmailDraft(equipmentId);
 }
 
-// メール下書きを表示
-function showBulkEmailDraft(equipmentId) {
-  const info = window.bulkOrderData ? window.bulkOrderData.find(d => d.config.id === equipmentId) : (window.bulkOrderDataMap ? window.bulkOrderDataMap[equipmentId] : null);
-  if (!info) {
-    alert('データの読み込み中です。しばらくお待ちください。');
-    return;
-  }
-  showBulkOrderDraft(equipmentId);
-}
-
-function showBulkOrderDraft(equipmentId) {
-  if (!window.bulkOrderDataMap || !window.bulkOrderDataMap[equipmentId]) {
-    alert('データの読み込み中です。しばらくお待ちください。');
-    return;
-  }
-  
-  const info = window.bulkOrderDataMap[equipmentId];
-  const draft = info.emailDraft;
-  
-  const modal = document.createElement('div');
-  modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
-  
-  const content = document.createElement('div');
-  content.className = 'bg-white rounded-lg shadow-2xl';
-  content.style.cssText = 'max-width: 700px; max-height: 85vh; width: 90%;';
-  
-  content.innerHTML = `
-    <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg">
-      <h2 class="text-xl font-bold"><i class="fas fa-envelope mr-2"></i>${info.config.emoji} ${info.config.name} - メール下書き</h2>
-    </div>
-    <div class="p-6">
-      <textarea id="email-draft-text" readonly class="w-full h-96 font-mono text-sm p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" style="resize: none;">${draft}</textarea>
-      <div class="mt-4 flex gap-3 justify-end">
-        <button onclick="copyBulkEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
-          <i class="fas fa-copy mr-2"></i>コピー
-        </button>
-        <button onclick="createBulkOrderProjectFromDraft('${equipmentId}')" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded transition shadow">
-          <i class="fas fa-clipboard-list mr-2"></i>案件を作成
-        </button>
-        <button onclick="closeBulkModal()" class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
-          <i class="fas fa-times mr-2"></i>閉じる
-        </button>
-      </div>
-    </div>
-  `;
-  
-  modal.appendChild(content);
-  document.body.appendChild(modal);
-  window.currentBulkModal = modal;
-  window.currentBulkEquipmentId = equipmentId; // モーダルから案件作成できるように保存
-  
-  modal.onclick = function(e) {
-    if (e.target === modal) closeBulkModal();
-  };
-}
-
-// メール下書きをコピー
-function copyBulkEmailDraft() {
-  const textarea = document.getElementById('email-draft-text');
-  textarea.select();
-  textarea.setSelectionRange(0, 99999);
-  
-  try {
-    document.execCommand('copy');
-    alert('✅ メール下書きをクリップボードにコピーしました');
-  } catch (err) {
-    alert('❌ コピーに失敗しました。手動でコピーしてください。');
-  }
-}
-
-// モーダルを閉じる
-function closeBulkModal() {
-  if (window.currentBulkModal) {
-    document.body.removeChild(window.currentBulkModal);
-    window.currentBulkModal = null;
-    window.currentBulkEquipmentId = null;
-  }
-}
-
-// メール下書きから直接案件を作成
-function createBulkOrderProjectFromDraft(equipmentId) {
-  if (!equipmentId && window.currentBulkEquipmentId) {
-    equipmentId = window.currentBulkEquipmentId;
-  }
-  closeBulkModal();
-  createBulkOrderProjectFor(equipmentId);
-}
 
 // 案件を作成
 function createBulkOrderProjectFor(equipmentId) {
+  // ノズルカバーの場合は特別処理
+  if (equipmentId === 'PARTS-PUMP-1Y') {
+    if (!window.nozzleCoverData) {
+      alert('データの読み込み中です。しばらくお待ちください。');
+      return;
+    }
+    
+    const info = window.nozzleCoverData;
+    if (!confirm(`ノズルカバー交換の一括案件を作成しますか?\n\n対象: ${info.targetCount}店舗（全店）\n実施予定: ${info.targetYear}年4月`)) {
+      return;
+    }
+    
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showLoading(false);
+        alert(`✅ 案件を作成しました\n\n案件ID: ${result.projectId}\n設備: ${result.equipmentName}\n対象店舗: ${result.targetCount}店舗`);
+        navigate('projects');
+      })
+      .withFailureHandler(function(error) {
+        showLoading(false);
+        alert('❌ 案件作成に失敗しました\n\n' + error);
+      })
+      .createNozzleCoverProject();
+    return;
+  }
+  
   if (!window.bulkOrderDataMap || !window.bulkOrderDataMap[equipmentId]) {
     alert('データの読み込み中です。しばらくお待ちください。');
     return;
@@ -699,6 +569,85 @@ function createIndividualProject(locCode, eqId, locName, eqName, workType) {
       alert('❌ 案件作成に失敗しました\n\n' + error);
     })
     .createIndividualProject(locCode, eqId, locName, eqName, workType);
+}
+
+// 一括発注のメール下書きモーダル（Gmail下書き作成ボタン付き）
+function showBulkEmailDraftWithGmail(equipmentId) {
+  // データ取得
+  let info = null;
+  
+  if (equipmentId === 'PARTS-PUMP-1Y') {
+    info = window.nozzleCoverData;
+  } else if (window.bulkOrderDataMap) {
+    info = window.bulkOrderDataMap[equipmentId];
+  }
+  
+  if (!info) {
+    alert('データの読み込み中です。しばらくお待ちください。');
+    return;
+  }
+  
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;';
+  
+  const content = document.createElement('div');
+  content.className = 'bg-white rounded-lg shadow-2xl';
+  content.style.cssText = 'max-width: 700px; max-height: 85vh; width: 90%;';
+  
+  content.innerHTML = `
+    <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4 rounded-t-lg">
+      <h2 class="text-xl font-bold"><i class="fas fa-envelope mr-2"></i>${info.config.emoji || ''} ${info.config.name} - メール下書き</h2>
+    </div>
+    <div class="p-6">
+      <textarea id="bulk-email-draft-text" readonly 
+                class="w-full h-96 font-mono text-sm p-4 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500" 
+                style="resize: none;">${info.emailDraft}</textarea>
+      <div class="mt-4 flex gap-3 justify-end">
+        <button onclick="copyBulkEmailDraftText()" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-copy mr-2"></i>コピー
+        </button>
+        <button onclick="createBulkOrderGmailDraftFor('${equipmentId}')" 
+                class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-envelope-open mr-2"></i>Gmail下書き作成
+        </button>
+        <button onclick="closeBulkEmailDraftModal()" 
+                class="bg-gray-500 hover:bg-gray-600 text-white px-5 py-2 rounded transition shadow">
+          <i class="fas fa-times mr-2"></i>閉じる
+        </button>
+      </div>
+    </div>
+  `;
+  
+  modal.appendChild(content);
+  document.body.appendChild(modal);
+  window.currentBulkEmailModal = modal;
+  
+  modal.onclick = function(e) {
+    if (e.target === modal) closeBulkEmailDraftModal();
+  };
+}
+
+// 一括発注メール下書きをコピー
+function copyBulkEmailDraftText() {
+  const textarea = document.getElementById('bulk-email-draft-text');
+  textarea.select();
+  textarea.setSelectionRange(0, 99999);
+  
+  try {
+    document.execCommand('copy');
+    alert('✅ メール下書きをクリップボードにコピーしました');
+  } catch (err) {
+    alert('❌ コピーに失敗しました。手動でコピーしてください。');
+  }
+}
+
+// 一括発注メール下書きモーダルを閉じる
+function closeBulkEmailDraftModal() {
+  if (window.currentBulkEmailModal) {
+    document.body.removeChild(window.currentBulkEmailModal);
+    window.currentBulkEmailModal = null;
+  }
 }
 
 </script>
