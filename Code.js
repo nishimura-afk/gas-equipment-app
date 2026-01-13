@@ -212,8 +212,10 @@ function createNozzleCoverDraftEmail(targetStores) {
   var currentMonth = today.getMonth() + 1;
   var fiscalYear = (currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1;
   var body = 'お世話になっております。\n\n' + fiscalYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
-  for (var i = 0; i < targetStores.length; i++) { body += '- ' + targetStores[i].name + '\n'; }
-  body += '\n【実施予定】\n' + fiscalYear + '年4月\n\n【発注先】\nタツノ\n\nよろしくお願いいたします。\n\n--------------------------------------------------\n日商有田株式会社\nnishimura@selfix.jp\n--------------------------------------------------';
+  for (var i = 0; i < targetStores.length; i++) { 
+    body += '- セルフィックス' + targetStores[i].name + '\n'; 
+  }
+  body += '\n--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------';
   return body;
 }
 
@@ -300,10 +302,9 @@ function createBulkOrderDraftEmail(configItem, targetStores, targetYear) {
   var body = 'お世話になっております。\n\n' + fiscalYear + '年度の' + configItem.name + 'の発注をお願いいたします。\n\n【対象店舗: ' + targetStores.length + '店舗】\n';
   for (var i = 0; i < targetStores.length; i++) {
     var s = targetStores[i];
-    body += '- ' + s.name + ' (前回: ' + s.lastDate.getFullYear() + '年' + (s.lastDate.getMonth()+1) + '月)\n';
-    if ((configItem.id.includes('PUMP')) && s.equipmentName) body += '  ' + s.equipmentName + '\n';
+    body += '- セルフィックス' + s.name + '\n';
   }
-  body += '\n【実施予定】\n' + fiscalYear + '年4月\n\n【発注先】\n' + configItem.vendor + '\n\nよろしくお願いいたします。\n\n--------------------------------------------------\n日商有田株式会社\nnishimura@selfix.jp\n--------------------------------------------------';
+  body += '\n--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------';
   return body;
 }
 
