@@ -16,9 +16,9 @@
     <div class="overflow-x-auto">
       <table class="w-full text-sm text-left">
         <thead class="bg-indigo-100 text-indigo-800">
-          <tr><th class="p-2">拠点</th><th class="p-2">設備名</th><th class="p-2">期限</th><th class="p-2">アクション</th></tr>
+          <tr><th class="p-2">拠点</th><th class="p-2">設備名</th><th class="p-2">期限</th></tr>
         </thead>
-        <tbody id="table-legal" class="divide-y divide-indigo-100"><tr><td colspan="4" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
+        <tbody id="table-legal" class="divide-y divide-indigo-100"><tr><td colspan="3" class="p-4 text-center text-gray-400">なし</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -123,9 +123,6 @@ function renderDashboard(data) {
       const category = i['カテゴリ'];
       const tr = document.createElement('tr');
       
-      // ==========================================
-      // 法定検査セクション
-      // ==========================================
       if (category === '法定検査') {
         lCount++;
         tr.className = "hover:bg-indigo-50";
@@ -134,7 +131,6 @@ function renderDashboard(data) {
         let statusColor = (statusLabel === '期限超過') ? 'text-red-600' : 'text-indigo-600';
         let status = `<span class="font-bold ${statusColor}">${statusLabel}</span>`;
         
-        // ボタン生成
         let actionBtn = `
           <button onclick="showIndividualEmailDraft('${i['拠点コード']}', '${i['設備ID']}', '${i['拠点名']}', '${i['設備名']}', '法定検査')" 
                   class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs mr-1">
@@ -146,26 +142,15 @@ function renderDashboard(data) {
           </button>
         `;
         
-        tr.innerHTML = `
-          <td class="p-2 font-bold">${i['拠点名']}</td>
-          <td class="p-2">${i['設備名']}</td>
-          <td class="p-2">${status}</td>
-          <td class="p-2">${actionBtn}</td>
-        `;
+        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td><td class="p-2">${actionBtn}</td>`;
         legalT.appendChild(tr);
       }
-      
-      // ==========================================
-      // 重要設備セクション
-      // ==========================================
       else if (category === '本体更新' || category === '美観' || category === 'メンテ') {
         mjCount++;
         tr.className = "hover:bg-rose-50";
-        
         let status = `<span class="font-bold ${i['本体ステータス']==='期限超過'?'text-rose-600':'text-amber-600'}">${i['本体ステータス']}</span>`;
         if(i['subsidyAlert']) status += `<br><span class="text-xs text-white bg-red-500 px-1 rounded">${i['subsidyAlert']}</span>`;
         
-        // ボタン生成（エアコンは電話依頼、その他はメール）
         const eqName = i['設備名'] || '';
         let actionBtn = '';
         
@@ -193,12 +178,7 @@ function renderDashboard(data) {
           `;
         }
         
-        tr.innerHTML = `
-          <td class="p-2 font-bold">${i['拠点名']}</td>
-          <td class="p-2">${i['設備名']}</td>
-          <td class="p-2">${status}</td>
-          <td class="p-2">${actionBtn}</td>
-        `;
+        tr.innerHTML = `<td class="p-2 font-bold">${i['拠点名']}</td><td class="p-2">${i['設備名']}</td><td class="p-2">${status}</td><td class="p-2">${actionBtn}</td>`;
         majorT.appendChild(tr);
       }
     });
@@ -244,8 +224,6 @@ function loadAllBulkOrderAlerts() {
           // ノズルカバーを表示
           if (nozzleInfo && nozzleInfo.hasAlert) {
             hasAnyAlert = true;
-            // ノズルカバーのデータも bulkOrderDataMap に追加（showBulkEmailDraft で使用）
-            window.bulkOrderDataMap['PARTS-PUMP-1Y'] = nozzleInfo;
             try {
               const div = createBulkAlertDiv(nozzleInfo, 'nozzle');
               container.appendChild(div);
@@ -300,8 +278,19 @@ function createBulkAlertDiv(info, type) {
   }
   
   const equipmentId = info.config.id;
+  const isNozzle = (type === 'nozzle');
   
-  const buttons = `
+  const buttons = isNozzle ? `
+    <button onclick="showNozzleCoverEmailDraft()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope mr-1"></i>メール下書き
+    </button>
+    <button onclick="createNozzleCoverGmailDraft()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope-open mr-1"></i>Gmail下書き作成
+    </button>
+    <button onclick="createNozzleCoverProject()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-clipboard-list mr-1"></i>案件作成
+    </button>
+  ` : `
     <button onclick="showBulkEmailDraft('${equipmentId}')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
       <i class="fas fa-envelope mr-1"></i>メール下書き
     </button>
@@ -656,7 +645,6 @@ function showEmailDraftModal(subject, body, locCode, eqId, locName, eqName, work
   };
 }
 
-// メール下書きコピー
 function copyIndividualEmailDraft() {
   const textarea = document.getElementById('individual-email-draft');
   textarea.select();
@@ -670,7 +658,6 @@ function copyIndividualEmailDraft() {
   }
 }
 
-// モーダルを閉じる
 function closeIndividualEmailModal() {
   if (window.currentIndividualModal) {
     document.body.removeChild(window.currentIndividualModal);
@@ -678,7 +665,6 @@ function closeIndividualEmailModal() {
   }
 }
 
-// Gmail下書き作成
 function createIndividualGmailDraft(locCode, eqId, locName, eqName, workType) {
   if (!confirm('Gmailの下書きを作成しますか？')) return;
   
@@ -697,7 +683,6 @@ function createIndividualGmailDraft(locCode, eqId, locName, eqName, workType) {
     .createIndividualGmailDraft(locCode, eqId, locName, eqName, workType);
 }
 
-// 個別案件作成
 function createIndividualProject(locCode, eqId, locName, eqName, workType) {
   if (!confirm(`案件を作成しますか？\n\nセルフィックス${locName}\n${eqName}\n作業: ${workType}`)) return;
   
@@ -715,4 +700,5 @@ function createIndividualProject(locCode, eqId, locName, eqName, workType) {
     })
     .createIndividualProject(locCode, eqId, locName, eqName, workType);
 }
+
 </script>
