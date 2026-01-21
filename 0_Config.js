@@ -83,7 +83,7 @@ const SHEET_NAMES = {
     'REPLACE_COMPRESSOR':    { category: '本体更新', years: 12, label: 'コンプレッサー更新', searchKey: 'コンプレッサー', suffix: 'COMP-01' },
     'REPLACE_AIR_TOWER':     { category: '不定期', years: 99, label: 'エアタワー更新', searchKey: 'エアタワー', suffix: 'AIR-01' },
     'REPLACE_FIRE_EXTINGUISHER': { category: '本体更新', years: 10, label: '消火器更新', searchKey: '消火器', suffix: 'FIRE-EXT-01' },
-    'REPLACE_AIRCON':        { category: '本体更新', years: 6, label: 'エアコン更新', searchKey: 'エアコン', suffix: 'AC-01' },
+    'REPLACE_AIRCON':        { category: '本体更新', years: 6, label: 'エアコン更新', searchKey: 'エアコン', suffix: 'AC-01', seasonal: true, alertMonth: 3, alertDay: 1 },
     'REPLACE_BREAKER':       { category: '本体更新', years: 10, label: '電子ブレーカー更新', searchKey: 'ブレーカー', suffix: 'BRK-01' },
     'REPLACE_WELL_PUMP':     { category: '本体更新', years: 10, label: '井戸ポンプ更新', searchKey: '井戸', suffix: 'WELL-P-01' },
     'REPLACE_WATER_PUMP':    { category: '本体更新', years: 15, label: '送水ポンプ更新', searchKey: '送水', suffix: 'WTR-P-01' },
