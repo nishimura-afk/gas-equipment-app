@@ -33,6 +33,20 @@ function recordExchangeComplete(locationCode, equipmentId, workType, workDate, s
   rowValues[9] = ""; 
   rowRange.setValues([rowValues]);
 
+  // 灯油計量機更新の場合、検定日もリセット
+  if (equipmentId.includes('PUMP-K-01')) {
+    const inspectionRow = masterData.find(row => 
+      row[0] == locationCode && 
+      String(row[2]).includes('PUMP-K-CHK')
+    );
+    
+    if (inspectionRow) {
+      const inspectionRowIndex = masterData.indexOf(inspectionRow);
+      masterSheet.getRange(inspectionRowIndex + 1, headers.indexOf('設置日(前回実施)') + 1)
+                .setValue(workDate);
+    }
+  }
+
   getSheet(config.SHEET_NAMES.HISTORY).appendRow([locationCode, equipmentId, workType, workDate, subsidyInfo || '-', '']);
   updateWebData();
   logSystemAction('UPDATE', `${locationCode}:${equipmentId} - ${workType}`);

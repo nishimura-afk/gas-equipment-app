@@ -24,9 +24,31 @@ function getDashboardData() {
     .filter(row => row[5] !== config.PROJECT_STATUS.COMPLETED && row[5] !== config.PROJECT_STATUS.CANCELLED)
     .map(row => `${row[1]}_${row[2]}`);
 
+  // 本体入れ替え案件がある設備の消耗品アラートを除外
+  const bodyReplacementProjects = scheduleData.slice(1)
+    .filter(row => 
+      row[5] !== config.PROJECT_STATUS.COMPLETED && 
+      row[5] !== config.PROJECT_STATUS.CANCELLED &&
+      (row[3].includes('本体') || row[3].includes('入替') || row[3].includes('更新'))
+    )
+    .map(row => `${row[1]}_${row[2]}`);
+
   const notices = data.filter(m => {
-    if (ignoreActions.includes(`${m['拠点コード']}_${m['設備ID']}`)) return false;
-    return m['本体ステータス'] !== config.STATUS.NORMAL || m['部品Aステータス'] !== config.STATUS.NORMAL || (m['部品Bステータス'] && m['部品Bステータス'] !== config.STATUS.NORMAL);
+    const equipmentKey = `${m['拠点コード']}_${m['設備ID']}`;
+    
+    // 既に案件化されているものは除外
+    if (ignoreActions.includes(equipmentKey)) return false;
+    
+    // 本体入れ替え案件がある場合、消耗品アラートは除外
+    if (bodyReplacementProjects.includes(equipmentKey) && 
+        m['部品Aステータス'] !== config.STATUS.NORMAL) {
+      return false;
+    }
+    
+    // その他のアラート判定
+    return m['本体ステータス'] !== config.STATUS.NORMAL || 
+           m['部品Aステータス'] !== config.STATUS.NORMAL || 
+           (m['部品Bステータス'] && m['部品Bステータス'] !== config.STATUS.NORMAL);
   });
   return { noticeCount: notices.length, normalCount: data.length - notices.length, noticeList: notices };
 }
