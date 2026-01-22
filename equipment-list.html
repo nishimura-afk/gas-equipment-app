@@ -32,10 +32,38 @@
     </div>
   </div>
 
+  <!-- ツールバー -->
+  <div class="flex justify-between items-center p-3 bg-slate-50 border-b">
+    <div class="flex gap-2">
+      <button onclick="selectAllEquipments()" class="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50">
+        <i class="fas fa-check-square mr-1"></i>すべて選択
+      </button>
+      <button onclick="deselectAllEquipments()" class="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50">
+        <i class="fas fa-square mr-1"></i>選択解除
+      </button>
+    </div>
+    <div class="flex gap-3 items-center">
+      <span class="text-xs font-bold text-slate-600" id="equipment-selected-count">0件選択中</span>
+      <button onclick="bulkCreateProjectsFromList()" 
+              class="px-4 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:bg-gray-400"
+              id="btn-bulk-project-list" disabled>
+        <i class="fas fa-clipboard-list mr-1"></i>選択した設備を案件化
+      </button>
+      <button onclick="bulkCreateEmailsFromList()" 
+              class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+              id="btn-bulk-email-list" disabled>
+        <i class="fas fa-envelope mr-1"></i>選択した設備のメール作成
+      </button>
+    </div>
+  </div>
+
   <div class="overflow-x-auto border rounded-lg shadow bg-white">
     <table class="w-full text-sm text-left whitespace-nowrap">
       <thead class="bg-slate-100 text-slate-700">
         <tr>
+          <th class="p-3 border-b w-10">
+            <input type="checkbox" class="equipment-checkbox-all accent-slate-600" onchange="toggleAllEquipments(this)">
+          </th>
           <th class="p-3 border-b w-32">拠点名</th>
           <th class="p-3 border-b">設備名</th>
           <th class="p-3 border-b w-24">次回予定</th>
@@ -45,7 +73,7 @@
           <th class="p-3 border-b text-center w-16">編集</th>
         </tr>
       </thead>
-      <tbody id="list-table-body" class="divide-y bg-white"><tr><td colspan="7" class="p-8 text-center text-gray-500">読み込み中...</td></tr></tbody>
+      <tbody id="list-table-body" class="divide-y bg-white"><tr><td colspan="8" class="p-8 text-center text-gray-500">読み込み中...</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -128,7 +156,7 @@ function applyFilters() {
 
 function renderList(list) {
   showLoading(false); const tb = document.getElementById('list-table-body'); tb.innerHTML = '';
-  if(!list||list.length===0) { tb.innerHTML='<tr><td colspan="7" class="p-8 text-center text-gray-500">条件に一致するデータがありません</td></tr>'; return; }
+  if(!list||list.length===0) { tb.innerHTML='<tr><td colspan="8" class="p-8 text-center text-gray-500">条件に一致するデータがありません</td></tr>'; return; }
   list.sort((a,b)=>(a['拠点コード']>b['拠点コード'])?1:-1);
   list.forEach(r => {
     const tr = document.createElement('tr'); tr.className = "hover:bg-slate-50 transition group";
@@ -142,6 +170,14 @@ function renderList(list) {
     const nextDate = r['次回予定日'] || '<span class="text-gray-300">-</span>';
     
     tr.innerHTML = `
+      <td class="p-3 text-center border-r border-slate-100">
+        <input type="checkbox" class="equipment-checkbox accent-slate-600"
+               data-loc="${r['拠点コード']}"
+               data-eq="${r['設備ID']}"
+               data-name="${r['拠点名']}"
+               data-eqname="${eqName}"
+               onchange="updateEquipmentSelection()">
+      </td>
       <td class="p-3 font-bold text-slate-700 border-r border-slate-100">${r['拠点名']}</td>
       <td class="p-3 border-r border-slate-100"><div class="font-bold text-slate-800">${eqName}</div>${r['spec']?`<div class="text-xs text-blue-600 mt-1"><i class="fas fa-tag mr-1"></i>${r['spec']}</div>`:''}</td>
       <td class="p-3 font-mono text-slate-800 border-r border-slate-100 font-bold bg-slate-50">${nextDate}</td>
@@ -152,8 +188,100 @@ function renderList(list) {
     `;
     tb.appendChild(tr);
   });
+  updateEquipmentSelection();
 }
 function openEqMemoModal(s,i,n,m,p) { document.getElementById('eq-memo-shop').value=s; document.getElementById('eq-memo-id').value=i; document.getElementById('eq-memo-title').innerText=`${s} / ${n}`; document.getElementById('eq-memo-text').value=m; document.getElementById('eq-spec-text').value=p; document.getElementById('eq-memo-modal').classList.remove('hidden'); }
 function closeEqMemoModal() { document.getElementById('eq-memo-modal').classList.add('hidden'); }
 function saveEqMemo() { showLoading(true); closeEqMemoModal(); google.script.run.withSuccessHandler(()=>{window.g_cache.list=null;listInit(true);}).saveNextWorkMemo(document.getElementById('eq-memo-shop').value,document.getElementById('eq-memo-id').value,document.getElementById('eq-memo-text').value,document.getElementById('eq-spec-text').value); }
+
+// ========================================
+// 設備一覧 - チェックボックス操作
+// ========================================
+
+function updateEquipmentSelection() {
+  const checked = document.querySelectorAll('.equipment-checkbox:checked');
+  document.getElementById('equipment-selected-count').textContent = `${checked.length}件選択中`;
+  document.getElementById('btn-bulk-project-list').disabled = (checked.length === 0);
+  document.getElementById('btn-bulk-email-list').disabled = (checked.length === 0);
+}
+
+function selectAllEquipments() {
+  document.querySelectorAll('.equipment-checkbox').forEach(cb => cb.checked = true);
+  updateEquipmentSelection();
+}
+
+function deselectAllEquipments() {
+  document.querySelectorAll('.equipment-checkbox').forEach(cb => cb.checked = false);
+  updateEquipmentSelection();
+}
+
+function toggleAllEquipments(checkbox) {
+  document.querySelectorAll('.equipment-checkbox').forEach(cb => cb.checked = checkbox.checked);
+  updateEquipmentSelection();
+}
+
+function bulkCreateProjectsFromList() {
+  const checked = Array.from(document.querySelectorAll('.equipment-checkbox:checked'));
+  if (checked.length === 0) return;
+  
+  if (!confirm(`${checked.length}件の設備を案件化しますか?`)) return;
+  
+  showLoading(true);
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const locCode = cb.dataset.loc;
+    const eqId = cb.dataset.eq;
+    const locName = cb.dataset.name;
+    const eqName = cb.dataset.eqname;
+    
+    google.script.run
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件の案件を作成しました`);
+          deselectAllEquipments();
+          navigate('progress');
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createIndividualProject(locCode, eqId, locName, eqName, '設備更新');
+  });
+}
+
+function bulkCreateEmailsFromList() {
+  const checked = Array.from(document.querySelectorAll('.equipment-checkbox:checked'));
+  if (checked.length === 0) return;
+  
+  if (!confirm(`${checked.length}件のメール下書きを作成しますか?`)) return;
+  
+  showLoading(true);
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const locCode = cb.dataset.loc;
+    const eqId = cb.dataset.eq;
+    const locName = cb.dataset.name;
+    const eqName = cb.dataset.eqname;
+    
+    google.script.run
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件のメール下書きを作成しました`);
+          deselectAllEquipments();
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createIndividualGmailDraft(locCode, eqId, locName, eqName, '設備更新');
+  });
+}
 </script>
