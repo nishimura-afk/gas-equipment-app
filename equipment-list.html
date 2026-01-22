@@ -129,6 +129,15 @@ function listInit(f=false) {
   }).getEquipmentList();
 }
 
+/**
+ * 設備名から基本名を抽出（括弧とその中身を除去）
+ */
+function getBaseEquipmentName(equipmentName) {
+  if (!equipmentName) return '';
+  // 括弧とその中身を削除（全角・半角両対応）
+  return equipmentName.replace(/[(\(（].*?[)\)）]/g, '').trim();
+}
+
 function initFilters(list) {
   // 拠点フィルターの初期化
   const locSel = document.getElementById('filter-loc');
@@ -144,13 +153,17 @@ function initFilters(list) {
     });
   }
 
-  // 設備名フィルターの初期化
+  // 設備名フィルターの初期化（改善版）
   const eqSel = document.getElementById('filter-equipment');
   if (eqSel.options.length <= 1) {
     const equipments = new Set();
     list.forEach(r => {
       if (r['設備名']) {
-        equipments.add(r['設備名']);
+        // 基本名を抽出してSetに追加
+        const baseName = getBaseEquipmentName(r['設備名']);
+        if (baseName) {
+          equipments.add(baseName);
+        }
       }
     });
     const sortedEqs = Array.from(equipments).sort();
@@ -181,8 +194,11 @@ function applyFilters() {
     // カテゴリーフィルター
     if (categoryFilter !== 'ALL' && r['カテゴリ'] !== categoryFilter) return false;
     
-    // 設備名フィルター
-    if (equipmentFilter !== 'ALL' && r['設備名'] !== equipmentFilter) return false;
+    // 設備名フィルター（改善版：基本名で比較）
+    if (equipmentFilter !== 'ALL') {
+      const baseName = getBaseEquipmentName(r['設備名']);
+      if (baseName !== equipmentFilter) return false;
+    }
     
     // アラートフィルター
     if (alertFilter) {
