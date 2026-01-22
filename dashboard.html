@@ -246,13 +246,9 @@ function renderDashboard(data) {
 
 function updateLegalSelection() {
   const checked = document.querySelectorAll('.legal-checkbox:checked');
-  const count = checked.length;
-  document.getElementById('legal-selected-count').textContent = `${count}件選択中`;
-  
-  const btnProject = document.getElementById('btn-bulk-project-legal');
-  const btnEmail = document.getElementById('btn-bulk-email-legal');
-  if (btnProject) btnProject.disabled = (count === 0);
-  if (btnEmail) btnEmail.disabled = (count === 0);
+  document.getElementById('legal-selected-count').textContent = `${checked.length}件選択中`;
+  document.getElementById('btn-bulk-project-legal').disabled = (checked.length === 0);
+  document.getElementById('btn-bulk-email-legal').disabled = (checked.length === 0);
 }
 
 function selectAllLegal() {
@@ -274,7 +270,7 @@ function bulkCreateProjectsLegal() {
   const checked = Array.from(document.querySelectorAll('.legal-checkbox:checked'));
   if (checked.length === 0) return;
   
-  if (!confirm(`${checked.length}件の案件を作成しますか？`)) return;
+  if (!confirm(`${checked.length}件の案件を作成しますか?`)) return;
   
   showLoading(true);
   let completed = 0;
@@ -307,7 +303,7 @@ function bulkCreateEmailsLegal() {
   const checked = Array.from(document.querySelectorAll('.legal-checkbox:checked'));
   if (checked.length === 0) return;
   
-  if (!confirm(`${checked.length}件のメール下書きを作成しますか？`)) return;
+  if (!confirm(`${checked.length}件のメール下書きを作成しますか?`)) return;
   
   showLoading(true);
   let completed = 0;
@@ -341,13 +337,9 @@ function bulkCreateEmailsLegal() {
 
 function updateMajorSelection() {
   const checked = document.querySelectorAll('.major-checkbox:checked');
-  const count = checked.length;
-  document.getElementById('major-selected-count').textContent = `${count}件選択中`;
-  
-  const btnProject = document.getElementById('btn-bulk-project-major');
-  const btnEmail = document.getElementById('btn-bulk-email-major');
-  if (btnProject) btnProject.disabled = (count === 0);
-  if (btnEmail) btnEmail.disabled = (count === 0);
+  document.getElementById('major-selected-count').textContent = `${checked.length}件選択中`;
+  document.getElementById('btn-bulk-project-major').disabled = (checked.length === 0);
+  document.getElementById('btn-bulk-email-major').disabled = (checked.length === 0);
 }
 
 function selectAllMajor() {
@@ -369,7 +361,7 @@ function bulkCreateProjectsMajor() {
   const checked = Array.from(document.querySelectorAll('.major-checkbox:checked'));
   if (checked.length === 0) return;
   
-  if (!confirm(`${checked.length}件の案件を作成しますか？`)) return;
+  if (!confirm(`${checked.length}件の案件を作成しますか?`)) return;
   
   showLoading(true);
   let completed = 0;
@@ -402,7 +394,7 @@ function bulkCreateEmailsMajor() {
   const checked = Array.from(document.querySelectorAll('.major-checkbox:checked'));
   if (checked.length === 0) return;
   
-  if (!confirm(`${checked.length}件のメール下書きを作成しますか？`)) return;
+  if (!confirm(`${checked.length}件のメール下書きを作成しますか?`)) return;
   
   showLoading(true);
   let completed = 0;
