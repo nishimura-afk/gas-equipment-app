@@ -15,9 +15,30 @@
       </div>
 
       <div class="flex items-center bg-white border rounded px-2 py-1">
-        <i class="fas fa-filter text-gray-400 mr-2"></i>
+        <i class="fas fa-map-marker-alt text-gray-400 mr-2"></i>
         <select id="filter-loc" class="text-sm outline-none bg-transparent" onchange="applyFilters()">
           <option value="ALL">全拠点表示</option>
+        </select>
+      </div>
+
+      <!-- 新規: カテゴリーフィルター -->
+      <div class="flex items-center bg-white border rounded px-2 py-1">
+        <i class="fas fa-folder text-gray-400 mr-2"></i>
+        <select id="filter-category" class="text-sm outline-none bg-transparent" onchange="applyFilters()">
+          <option value="ALL">全カテゴリー</option>
+          <option value="法定検査">法定検査</option>
+          <option value="本体更新">本体更新</option>
+          <option value="美観">美観</option>
+          <option value="部材更新">部材更新</option>
+          <option value="不定期">不定期</option>
+        </select>
+      </div>
+
+      <!-- 新規: 設備名フィルター -->
+      <div class="flex items-center bg-white border rounded px-2 py-1">
+        <i class="fas fa-wrench text-gray-400 mr-2"></i>
+        <select id="filter-equipment" class="text-sm outline-none bg-transparent" onchange="applyFilters()">
+          <option value="ALL">全設備</option>
         </select>
       </div>
       
@@ -95,7 +116,7 @@ let fullList = [];
 function listInit(f=false) {
   if(!f && window.g_cache.list) { 
     fullList = window.g_cache.list;
-    initLocFilter(fullList);
+    initFilters(fullList);
     applyFilters(); 
     return; 
   }
@@ -103,25 +124,49 @@ function listInit(f=false) {
   google.script.run.withSuccessHandler(l => { 
     window.g_cache.list=l; 
     fullList = l;
-    initLocFilter(l);
+    initFilters(l);
     applyFilters(); 
   }).getEquipmentList();
 }
 
-function initLocFilter(list) {
-  const sel = document.getElementById('filter-loc');
-  if (sel.options.length > 1) return;
-  const locs = new Set();
-  list.forEach(r => locs.add(r['拠点名']));
-  const sortedLocs = Array.from(locs).sort();
-  sortedLocs.forEach(loc => {
-    const op = document.createElement('option');
-    op.value = loc; op.innerText = loc; sel.appendChild(op);
-  });
+function initFilters(list) {
+  // 拠点フィルターの初期化
+  const locSel = document.getElementById('filter-loc');
+  if (locSel.options.length <= 1) {
+    const locs = new Set();
+    list.forEach(r => locs.add(r['拠点名']));
+    const sortedLocs = Array.from(locs).sort();
+    sortedLocs.forEach(loc => {
+      const op = document.createElement('option');
+      op.value = loc; 
+      op.innerText = loc; 
+      locSel.appendChild(op);
+    });
+  }
+
+  // 設備名フィルターの初期化
+  const eqSel = document.getElementById('filter-equipment');
+  if (eqSel.options.length <= 1) {
+    const equipments = new Set();
+    list.forEach(r => {
+      if (r['設備名']) {
+        equipments.add(r['設備名']);
+      }
+    });
+    const sortedEqs = Array.from(equipments).sort();
+    sortedEqs.forEach(eq => {
+      const op = document.createElement('option');
+      op.value = eq;
+      op.innerText = eq;
+      eqSel.appendChild(op);
+    });
+  }
 }
 
 function applyFilters() {
   const locFilter = document.getElementById('filter-loc').value;
+  const categoryFilter = document.getElementById('filter-category').value;
+  const equipmentFilter = document.getElementById('filter-equipment').value;
   const alertFilter = document.getElementById('filter-alert').checked;
   const yearFilter = document.getElementById('filter-year').value;
   
@@ -130,13 +175,24 @@ function applyFilters() {
   const nextYearEnd = new Date(thisYearEnd.getFullYear() + 1, 2, 31);
 
   const filtered = fullList.filter(r => {
+    // 拠点フィルター
     if (locFilter !== 'ALL' && r['拠点名'] !== locFilter) return false;
     
+    // カテゴリーフィルター
+    if (categoryFilter !== 'ALL' && r['カテゴリ'] !== categoryFilter) return false;
+    
+    // 設備名フィルター
+    if (equipmentFilter !== 'ALL' && r['設備名'] !== equipmentFilter) return false;
+    
+    // アラートフィルター
     if (alertFilter) {
-      const hasIssue = (r['部品Aステータス'] !== '正常') || (r['部品Bステータス'] !== '正常' && r['部品Bステータス']) || (r['本体ステータス'] !== '正常');
+      const hasIssue = (r['部品Aステータス'] !== '正常') || 
+                       (r['部品Bステータス'] !== '正常' && r['部品Bステータス']) || 
+                       (r['本体ステータス'] !== '正常');
       if (!hasIssue) return false;
     }
 
+    // 年度フィルター
     if (yearFilter !== 'ALL') {
       const nextDateStr = r['次回予定日'];
       if (!nextDateStr) return false;
