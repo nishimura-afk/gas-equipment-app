@@ -29,7 +29,7 @@
         <thead class="bg-indigo-100 text-indigo-800">
           <tr>
             <th class="p-2 w-10">
-              <input type="checkbox" class="legal-checkbox-all" onchange="toggleAllLegal(this)" aria-label="法定検査をすべて選択">
+              <input type="checkbox" class="legal-checkbox-all accent-indigo-600" onchange="toggleAllLegal(this)">
             </th>
             <th class="p-2">拠点</th>
             <th class="p-2">設備名</th>
@@ -75,7 +75,7 @@
         <thead class="bg-rose-100 text-rose-800">
           <tr>
             <th class="p-2 w-10">
-              <input type="checkbox" class="major-checkbox-all" onchange="toggleAllMajor(this)" aria-label="重要設備をすべて選択">
+              <input type="checkbox" class="major-checkbox-all accent-rose-600" onchange="toggleAllMajor(this)">
             </th>
             <th class="p-2">拠点</th>
             <th class="p-2">設備名</th>
@@ -192,13 +192,12 @@ function renderDashboard(data) {
         let status = `<span class="font-bold ${statusColor}">${statusLabel}</span>`;
         tr.innerHTML = `
           <td class="p-2">
-            <input type="checkbox" class="legal-checkbox"
+            <input type="checkbox" class="legal-checkbox accent-indigo-600"
                    data-loc="${i['拠点コード']}"
                    data-eq="${i['設備ID']}"
                    data-name="${i['拠点名']}"
                    data-eqname="${i['設備名']}"
-                   onchange="updateLegalSelection()"
-                   aria-label="${i['拠点名']} ${i['設備名']}を選択">
+                   onchange="updateLegalSelection()">
           </td>
           <td class="p-2 font-bold">${i['拠点名']}</td>
           <td class="p-2">${i['設備名']}</td>
@@ -215,13 +214,12 @@ function renderDashboard(data) {
         const eqName = i['設備名'] || '';
         tr.innerHTML = `
           <td class="p-2">
-            <input type="checkbox" class="major-checkbox"
+            <input type="checkbox" class="major-checkbox accent-rose-600"
                    data-loc="${i['拠点コード']}"
                    data-eq="${i['設備ID']}"
                    data-name="${i['拠点名']}"
                    data-eqname="${eqName}"
-                   onchange="updateMajorSelection()"
-                   aria-label="${i['拠点名']} ${eqName}を選択">
+                   onchange="updateMajorSelection()">
           </td>
           <td class="p-2 font-bold">${i['拠点名']}</td>
           <td class="p-2">${i['設備名']}</td>
@@ -242,25 +240,19 @@ function renderDashboard(data) {
   updateMajorSelection();
 }
 
-// =================================================================
-// ダッシュボード選択・一括操作
-// =================================================================
+// ========================================
+// 法定検査セクション - チェックボックス操作
+// ========================================
 
 function updateLegalSelection() {
-  const allItems = document.querySelectorAll('.legal-checkbox');
   const checked = document.querySelectorAll('.legal-checkbox:checked');
   const count = checked.length;
-  const allCheck = document.querySelector('.legal-checkbox-all');
+  document.getElementById('legal-selected-count').textContent = `${count}件選択中`;
+  
   const btnProject = document.getElementById('btn-bulk-project-legal');
   const btnEmail = document.getElementById('btn-bulk-email-legal');
-  
-  document.getElementById('legal-selected-count').textContent = `${count}件選択中`;
   if (btnProject) btnProject.disabled = (count === 0);
   if (btnEmail) btnEmail.disabled = (count === 0);
-  if (allCheck) {
-    allCheck.checked = (count > 0 && count === allItems.length);
-    allCheck.indeterminate = (count > 0 && count < allItems.length);
-  }
 }
 
 function selectAllLegal() {
@@ -278,21 +270,84 @@ function toggleAllLegal(checkbox) {
   updateLegalSelection();
 }
 
+function bulkCreateProjectsLegal() {
+  const checked = Array.from(document.querySelectorAll('.legal-checkbox:checked'));
+  if (checked.length === 0) return;
+  
+  if (!confirm(`${checked.length}件の案件を作成しますか？`)) return;
+  
+  showLoading(true);
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const locCode = cb.dataset.loc;
+    const eqId = cb.dataset.eq;
+    const locName = cb.dataset.name;
+    const eqName = cb.dataset.eqname;
+    
+    google.script.run
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件の案件を作成しました`);
+          deselectAllLegal();
+          dashboardInit(true);
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createIndividualProject(locCode, eqId, locName, eqName, '法定検査');
+  });
+}
+
+function bulkCreateEmailsLegal() {
+  const checked = Array.from(document.querySelectorAll('.legal-checkbox:checked'));
+  if (checked.length === 0) return;
+  
+  if (!confirm(`${checked.length}件のメール下書きを作成しますか？`)) return;
+  
+  showLoading(true);
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const locCode = cb.dataset.loc;
+    const eqId = cb.dataset.eq;
+    const locName = cb.dataset.name;
+    const eqName = cb.dataset.eqname;
+    
+    google.script.run
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件のメール下書きを作成しました`);
+          deselectAllLegal();
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createIndividualGmailDraft(locCode, eqId, locName, eqName, '法定検査');
+  });
+}
+
+// ========================================
+// 重要設備セクション - チェックボックス操作
+// ========================================
+
 function updateMajorSelection() {
-  const allItems = document.querySelectorAll('.major-checkbox');
   const checked = document.querySelectorAll('.major-checkbox:checked');
   const count = checked.length;
-  const allCheck = document.querySelector('.major-checkbox-all');
+  document.getElementById('major-selected-count').textContent = `${count}件選択中`;
+  
   const btnProject = document.getElementById('btn-bulk-project-major');
   const btnEmail = document.getElementById('btn-bulk-email-major');
-  
-  document.getElementById('major-selected-count').textContent = `${count}件選択中`;
   if (btnProject) btnProject.disabled = (count === 0);
   if (btnEmail) btnEmail.disabled = (count === 0);
-  if (allCheck) {
-    allCheck.checked = (count > 0 && count === allItems.length);
-    allCheck.indeterminate = (count > 0 && count < allItems.length);
-  }
 }
 
 function selectAllMajor() {
@@ -310,112 +365,36 @@ function toggleAllMajor(checkbox) {
   updateMajorSelection();
 }
 
-function runBatch(items, handler, done) {
-  let successCount = 0;
-  const failed = [];
-  const runNext = (index) => {
-    if (index >= items.length) return done({ successCount, failed });
-    handler(items[index], () => {
-      successCount++;
-      runNext(index + 1);
-    }, (error) => {
-      failed.push({ item: items[index], error: error });
-      runNext(index + 1);
-    });
-  };
-  runNext(0);
-}
-
-function bulkCreateProjectsLegal() {
-  const checked = Array.from(document.querySelectorAll('.legal-checkbox:checked'));
-  if (checked.length === 0) return;
-  
-  if (!confirm(`${checked.length}件の案件を作成しますか？`)) return;
-  
-  const items = checked.map(cb => ({
-    locCode: cb.dataset.loc,
-    eqId: cb.dataset.eq,
-    locName: cb.dataset.name,
-    eqName: cb.dataset.eqname,
-    workType: '法定検査'
-  }));
-  
-  showLoading(true);
-  runBatch(items, (item, ok, ng) => {
-    google.script.run
-      .withSuccessHandler(() => ok())
-      .withFailureHandler(err => ng(err))
-      .createIndividualProject(item.locCode, item.eqId, item.locName, item.eqName, item.workType);
-  }, (result) => {
-    showLoading(false);
-    const failedCount = result.failed.length;
-    alert(`✅ 案件作成完了\n\n成功: ${result.successCount}件\n失敗: ${failedCount}件`);
-    dashboardInit(true);
-  });
-}
-
-function bulkCreateEmailsLegal() {
-  const checked = Array.from(document.querySelectorAll('.legal-checkbox:checked'));
-  if (checked.length === 0) return;
-  
-  if (!confirm(`${checked.length}件のメール下書きを作成しますか？`)) return;
-  
-  const items = checked.map(cb => ({
-    locCode: cb.dataset.loc,
-    eqId: cb.dataset.eq,
-    locName: cb.dataset.name,
-    eqName: cb.dataset.eqname,
-    workType: '法定検査'
-  }));
-  
-  showLoading(true);
-  runBatch(items, (item, ok, ng) => {
-    google.script.run
-      .withSuccessHandler(() => ok())
-      .withFailureHandler(err => ng(err))
-      .createIndividualGmailDraft(item.locCode, item.eqId, item.locName, item.eqName, item.workType);
-  }, (result) => {
-    showLoading(false);
-    const failedCount = result.failed.length;
-    alert(`✅ メール下書き作成完了\n\n成功: ${result.successCount}件\n失敗: ${failedCount}件`);
-    dashboardInit(true);
-  });
-}
-
 function bulkCreateProjectsMajor() {
   const checked = Array.from(document.querySelectorAll('.major-checkbox:checked'));
   if (checked.length === 0) return;
   
-  const allItems = checked.map(cb => ({
-    locCode: cb.dataset.loc,
-    eqId: cb.dataset.eq,
-    locName: cb.dataset.name,
-    eqName: cb.dataset.eqname
-  }));
-  const skipped = allItems.filter(i => (i.eqName || '').includes('エアコン'));
-  const items = allItems.filter(i => !(i.eqName || '').includes('エアコン'))
-    .map(i => ({ ...i, workType: '本体更新' }));
-  
-  if (items.length === 0) {
-    alert(`エアコンは電話依頼のため一括作成から除外しています（${skipped.length}件）`);
-    return;
-  }
-  
-  const skipMessage = skipped.length > 0 ? `\n\nエアコンは除外: ${skipped.length}件` : '';
-  if (!confirm(`${items.length}件の案件を作成しますか？${skipMessage}`)) return;
+  if (!confirm(`${checked.length}件の案件を作成しますか？`)) return;
   
   showLoading(true);
-  runBatch(items, (item, ok, ng) => {
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const locCode = cb.dataset.loc;
+    const eqId = cb.dataset.eq;
+    const locName = cb.dataset.name;
+    const eqName = cb.dataset.eqname;
+    
     google.script.run
-      .withSuccessHandler(() => ok())
-      .withFailureHandler(err => ng(err))
-      .createIndividualProject(item.locCode, item.eqId, item.locName, item.eqName, item.workType);
-  }, (result) => {
-    showLoading(false);
-    const failedCount = result.failed.length;
-    const skipText = skipped.length > 0 ? `\n除外: ${skipped.length}件` : '';
-    alert(`✅ 案件作成完了\n\n成功: ${result.successCount}件\n失敗: ${failedCount}件${skipText}`);
-    dashboardInit(true);
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件の案件を作成しました`);
+          deselectAllMajor();
+          dashboardInit(true);
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createIndividualProject(locCode, eqId, locName, eqName, '本体更新');
   });
 }
 
@@ -423,36 +402,31 @@ function bulkCreateEmailsMajor() {
   const checked = Array.from(document.querySelectorAll('.major-checkbox:checked'));
   if (checked.length === 0) return;
   
-  const allItems = checked.map(cb => ({
-    locCode: cb.dataset.loc,
-    eqId: cb.dataset.eq,
-    locName: cb.dataset.name,
-    eqName: cb.dataset.eqname
-  }));
-  const skipped = allItems.filter(i => (i.eqName || '').includes('エアコン'));
-  const items = allItems.filter(i => !(i.eqName || '').includes('エアコン'))
-    .map(i => ({ ...i, workType: '本体更新' }));
-  
-  if (items.length === 0) {
-    alert(`エアコンは電話依頼のため一括作成から除外しています（${skipped.length}件）`);
-    return;
-  }
-  
-  const skipMessage = skipped.length > 0 ? `\n\nエアコンは除外: ${skipped.length}件` : '';
-  if (!confirm(`${items.length}件のメール下書きを作成しますか？${skipMessage}`)) return;
+  if (!confirm(`${checked.length}件のメール下書きを作成しますか？`)) return;
   
   showLoading(true);
-  runBatch(items, (item, ok, ng) => {
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const locCode = cb.dataset.loc;
+    const eqId = cb.dataset.eq;
+    const locName = cb.dataset.name;
+    const eqName = cb.dataset.eqname;
+    
     google.script.run
-      .withSuccessHandler(() => ok())
-      .withFailureHandler(err => ng(err))
-      .createIndividualGmailDraft(item.locCode, item.eqId, item.locName, item.eqName, item.workType);
-  }, (result) => {
-    showLoading(false);
-    const failedCount = result.failed.length;
-    const skipText = skipped.length > 0 ? `\n除外: ${skipped.length}件` : '';
-    alert(`✅ メール下書き作成完了\n\n成功: ${result.successCount}件\n失敗: ${failedCount}件${skipText}`);
-    dashboardInit(true);
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件のメール下書きを作成しました`);
+          deselectAllMajor();
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createIndividualGmailDraft(locCode, eqId, locName, eqName, '本体更新');
   });
 }
 
