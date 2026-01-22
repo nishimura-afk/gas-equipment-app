@@ -266,12 +266,24 @@ function calculateBodyStatus(installDate, cycle, today, statusEnum) {
   
   // 季節性のサイクルの場合
   if (cycle.seasonal && cycle.alertMonth && cycle.alertDay) {
-    const alertDate = getSeasonalAlertDate(installDate, cycle);
-    if (alertDate && today >= alertDate) {
-      const deadlineDate = new Date(installDate);
-      deadlineDate.setFullYear(deadlineDate.getFullYear() + cycle.years);
-      return (today >= deadlineDate) ? statusEnum.PREPARE : statusEnum.NOTICE;
+    // 期限年を計算
+    const deadlineYear = installDate.getFullYear() + cycle.years;
+    const deadlineDate = new Date(deadlineYear, cycle.alertMonth - 1, cycle.alertDay);
+    
+    // 前年度のアラート日を計算（期限の1年前の指定月日）
+    const alertYear = deadlineYear - 1;
+    const alertDate = new Date(alertYear, cycle.alertMonth - 1, cycle.alertDay);
+    
+    // 期限超過判定
+    if (today >= deadlineDate) {
+      return statusEnum.PREPARE;
     }
+    
+    // アラート判定（前年度の指定日以降）
+    if (today >= alertDate) {
+      return statusEnum.NOTICE;
+    }
+    
     return statusEnum.NORMAL;
   }
   
