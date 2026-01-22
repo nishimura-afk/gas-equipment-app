@@ -28,3 +28,19 @@ function testNozzleCover() {
     Logger.log(s.code + ' ' + s.name + ' - ' + Utilities.formatDate(s.installDate, 'JST', 'yyyy/MM/dd'));
   });
 }
+
+/**
+ * デバッグ用：ステータス集計シートのヘッダーを確認
+ */
+function debugStatusHeaders() {
+  const config = getConfig();
+  const statusSheet = getSheet(config.SHEET_NAMES.STATUS_SUMMARY);
+  const headers = statusSheet.getRange(1, 1, 1, statusSheet.getLastColumn()).getValues()[0];
+  
+  Logger.log('=== ステータス集計シートのヘッダー ===');
+  headers.forEach((header, index) => {
+    Logger.log(`列${index + 1}: ${header}`);
+  });
+  
+  return headers;
+}
