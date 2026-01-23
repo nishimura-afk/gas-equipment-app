@@ -180,13 +180,11 @@ function updateWebData() {
         const hasPartB = (cycle.category === '本体更新' && partBDate) ? '対象' : '';
         
         // monthDiffAを計算（部品Aの経過月数）
-        // monthDiffAは必ず数値型にする
-        let monthDiffA = 0;
-        if (partADate && partADate instanceof Date && !isNaN(partADate.getTime())) {
+        // 部品B対象の設備（本体更新カテゴリ）には monthDiffA は不要なので空文字列
+        let monthDiffA = '';
+        if (cycle.category === '部材更新' && partADate && partADate instanceof Date && !isNaN(partADate.getTime())) {
           monthDiffA = Math.floor(getYearsDiff(partADate, today) * 12);
         }
-        // 念のため数値であることを保証
-        monthDiffA = Number(monthDiffA) || 0;
         
         // subsidyAlertの計算（必要に応じて）
         const subsidyAlert = '';
