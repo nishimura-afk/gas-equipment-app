@@ -181,8 +181,18 @@ function renderDashboard(data) {
   if (data && data.noticeList) {
     data.noticeList.forEach(i => {
       const category = i['カテゴリ'];
+      
+      // 本体・部品A・部品Bのいずれかが正常でない場合のみ処理
+      const hasAlert = 
+        i['本体ステータス'] !== '正常' || 
+        i['部品Aステータス'] !== '正常' || 
+        (i['部品Bステータス'] && i['部品Bステータス'] !== '正常');
+      
+      if (!hasAlert) return; // すべて正常なら表示しない
+      
       const tr = document.createElement('tr');
       
+      // 法定検査セクション
       if (category === '法定検査') {
         lCount++;
         tr.className = "hover:bg-indigo-50";
@@ -190,6 +200,7 @@ function renderDashboard(data) {
         let statusLabel = i['部品Aステータス'];
         let statusColor = (statusLabel === '期限超過') ? 'text-red-600' : 'text-indigo-600';
         let status = `<span class="font-bold ${statusColor}">${statusLabel}</span>`;
+        
         tr.innerHTML = `
           <td class="p-2">
             <input type="checkbox" class="legal-checkbox accent-indigo-600"
@@ -205,11 +216,30 @@ function renderDashboard(data) {
         `;
         legalT.appendChild(tr);
       }
-      else if (category === '本体更新' || category === '美観' || category === 'メンテ') {
+      // 本体更新・美観・部材更新など（法定検査以外）
+      else {
         mjCount++;
         tr.className = "hover:bg-rose-50";
-        let status = `<span class="font-bold ${i['本体ステータス']==='期限超過'?'text-rose-600':'text-amber-600'}">${i['本体ステータス']}</span>`;
-        if(i['subsidyAlert']) status += `<br><span class="text-xs text-white bg-red-500 px-1 rounded">${i['subsidyAlert']}</span>`;
+        
+        // ステータス表示の優先順位：本体 > 部品A > 部品B
+        let statusLabel = '';
+        let statusColor = '';
+        
+        if (i['本体ステータス'] !== '正常') {
+          statusLabel = i['本体ステータス'];
+          statusColor = (statusLabel === '期限超過') ? 'text-rose-600' : 'text-amber-600';
+        } else if (i['部品Aステータス'] !== '正常') {
+          statusLabel = i['部品Aステータス'];
+          statusColor = 'text-amber-600';
+        } else if (i['部品Bステータス'] && i['部品Bステータス'] !== '正常') {
+          statusLabel = i['部品Bステータス'];
+          statusColor = 'text-amber-600';
+        }
+        
+        let status = `<span class="font-bold ${statusColor}">${statusLabel}</span>`;
+        if(i['subsidyAlert']) {
+          status += `<br><span class="text-xs text-white bg-red-500 px-1 rounded">${i['subsidyAlert']}</span>`;
+        }
         
         const eqName = i['設備名'] || '';
         tr.innerHTML = `
