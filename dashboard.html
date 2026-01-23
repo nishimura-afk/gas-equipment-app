@@ -182,18 +182,15 @@ function renderDashboard(data) {
     data.noticeList.forEach(i => {
       const category = i['カテゴリ'];
       
-      // 本体・部品A・部品Bのいずれかが正常でない場合のみ処理
-      const hasAlert = 
-        i['本体ステータス'] !== '正常' || 
-        i['部品Aステータス'] !== '正常' || 
-        (i['部品Bステータス'] && i['部品Bステータス'] !== '正常');
-      
-      if (!hasAlert) return; // すべて正常なら表示しない
+      // アラート判定を個別に定義
+      const hasBodyAlert = i['本体ステータス'] !== '正常';
+      const hasPartAAlert = i['部品Aステータス'] !== '正常';
+      const hasPartBAlert = i['部品Bステータス'] && i['部品Bステータス'] !== '正常';
       
       const tr = document.createElement('tr');
       
-      // 法定検査セクション
-      if (category === '法定検査') {
+      // 法定検査セクション（部品Aのみアラート）
+      if (category === '法定検査' && hasPartAAlert) {
         lCount++;
         tr.className = "hover:bg-indigo-50";
         
@@ -216,22 +213,19 @@ function renderDashboard(data) {
         `;
         legalT.appendChild(tr);
       }
-      // 本体更新・美観・部材更新など（法定検査以外）
-      else {
+      // 本体更新・美観セクション（本体または部品Bのアラート）
+      else if ((category === '本体更新' || category === '美観') && (hasBodyAlert || hasPartBAlert)) {
         mjCount++;
         tr.className = "hover:bg-rose-50";
         
-        // ステータス表示の優先順位：本体 > 部品A > 部品B
+        // ステータス表示の優先順位：本体 > 部品B
         let statusLabel = '';
         let statusColor = '';
         
-        if (i['本体ステータス'] !== '正常') {
+        if (hasBodyAlert) {
           statusLabel = i['本体ステータス'];
           statusColor = (statusLabel === '期限超過') ? 'text-rose-600' : 'text-amber-600';
-        } else if (i['部品Aステータス'] !== '正常') {
-          statusLabel = i['部品Aステータス'];
-          statusColor = 'text-amber-600';
-        } else if (i['部品Bステータス'] && i['部品Bステータス'] !== '正常') {
+        } else if (hasPartBAlert) {
           statusLabel = i['部品Bステータス'];
           statusColor = 'text-amber-600';
         }
@@ -257,6 +251,7 @@ function renderDashboard(data) {
         `;
         majorT.appendChild(tr);
       }
+      // 部材更新・不定期はダッシュボードに表示しない（設備一覧で管理）
     });
   }
 
