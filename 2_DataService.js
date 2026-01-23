@@ -242,20 +242,43 @@ function updateWebData() {
 
 /**
  * 設備IDまたは設備名からメンテナンスサイクルを特定
+ * 優先順位: suffix完全一致 > suffix部分一致 > searchKey
  */
 function findCycleByEquipmentId(eqId, eqName, cycles) {
+  let suffixMatch = null;
+  let searchKeyMatch = null;
+  
   for (const key in cycles) {
     const cycle = cycles[key];
     
-    // suffixで判定
-    if (cycle.suffix && eqId && eqId.includes(cycle.suffix)) {
+    // 1. suffixで完全一致判定（最優先）
+    if (cycle.suffix && eqId === cycle.suffix) {
       return cycle;
     }
     
-    // searchKeyで判定
-    if (cycle.searchKey && eqName && eqName.includes(cycle.searchKey)) {
-      return cycle;
+    // 2. suffixで部分一致判定（2番目の優先度）
+    if (cycle.suffix && eqId && eqId.includes(cycle.suffix)) {
+      if (!suffixMatch) {
+        suffixMatch = cycle;
+      }
     }
+    
+    // 3. searchKeyで判定（最後の優先度）
+    if (cycle.searchKey && eqName && eqName.includes(cycle.searchKey)) {
+      if (!searchKeyMatch) {
+        searchKeyMatch = cycle;
+      }
+    }
+  }
+  
+  // suffixマッチを優先
+  if (suffixMatch) {
+    return suffixMatch;
+  }
+  
+  // searchKeyマッチ
+  if (searchKeyMatch) {
+    return searchKeyMatch;
   }
   
   return null;
