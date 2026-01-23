@@ -180,10 +180,17 @@ function updateWebData() {
         const hasPartB = (cycle.category === '本体更新' && partBDate) ? '対象' : '';
         
         // monthDiffAを計算（部品Aの経過月数）
-        // 部品B対象の設備（本体更新カテゴリ）には monthDiffA は不要なので空文字列
+        // 部材更新カテゴリのみ必要
         let monthDiffA = '';
-        if (cycle.category === '部材更新' && partADate && partADate instanceof Date && !isNaN(partADate.getTime())) {
-          monthDiffA = Math.floor(getYearsDiff(partADate, today) * 12);
+        if (cycle.category === '部材更新') {
+          // 部品A交換日がある場合はそれを使用、なければ設置日を使用
+          const baseDate = (partADate && partADate instanceof Date && !isNaN(partADate.getTime())) 
+            ? partADate 
+            : installDate;
+          
+          if (baseDate && baseDate instanceof Date && !isNaN(baseDate.getTime())) {
+            monthDiffA = Math.floor(getYearsDiff(baseDate, today) * 12);
+          }
         }
         
         // subsidyAlertの計算（必要に応じて）
