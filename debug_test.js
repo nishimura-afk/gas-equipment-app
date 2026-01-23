@@ -144,3 +144,28 @@ function checkActualStatusSheet() {
   
   Logger.log('\n========================================');
 }
+
+function debugPARTS_PUMP_4Y() {
+  const config = getConfig();
+  
+  // Configの設定を確認
+  Logger.log('=== Config設定 ===');
+  const cycle = config.MAINTENANCE_CYCLES['PARTS_PUMP_4Y'];
+  Logger.log('カテゴリ: ' + cycle.category);
+  Logger.log('年数: ' + cycle.years);
+  Logger.log('searchKey: ' + cycle.searchKey);
+  Logger.log('suffix: ' + cycle.suffix);
+  
+  // 実際にマッチングできるか確認
+  Logger.log('\n=== マッチングテスト ===');
+  const testEqId = 'PARTS-PUMP-4Y';
+  const testEqName = 'ガソリン計量機部品(4年)';
+  
+  const matched = findCycleByEquipmentId(testEqId, testEqName, config.MAINTENANCE_CYCLES);
+  if (matched) {
+    Logger.log('✅ マッチング成功');
+    Logger.log('マッチしたカテゴリ: ' + matched.category);
+  } else {
+    Logger.log('❌ マッチング失敗');
+  }
+}
