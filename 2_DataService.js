@@ -166,7 +166,12 @@ function updateWebData() {
         // ステータスを計算
         const bodyStatus = calculateBodyStatus(installDate, cycle, today, config.STATUS);
         const partAStatus = calculatePartAStatus(partADate || installDate, cycle, today, config.STATUS);
-        const partBStatus = calculatePartBStatus(partBDate || installDate, cycle, today, config.STATUS);
+        
+        // 部品B: 本体更新かつ交換日が実際に記録されている場合のみ計算
+        let partBStatus = config.STATUS.NORMAL;
+        if (cycle.category === '本体更新' && partBDate && partBDate instanceof Date && !isNaN(partBDate.getTime())) {
+          partBStatus = calculatePartBStatus(partBDate, cycle, today, config.STATUS);
+        }
         
         // 次回予定日を計算
         const nextDate = calculateNextDate(installDate, partADate, cycle);
@@ -328,11 +333,12 @@ function calculatePartAStatus(partADate, cycle, today, statusEnum) {
  */
 function calculatePartBStatus(partBDate, cycle, today, statusEnum) {
   // 部品Bが関係ないサイクルの場合
-  if (cycle.category !== '本体更新' || !partBDate) {
+  if (cycle.category !== '本体更新') {
     return statusEnum.NORMAL;
   }
   
-  if (!(partBDate instanceof Date) || isNaN(partBDate.getTime())) {
+  // 部品B交換日が記録されていない場合は正常扱い（必須チェック）
+  if (!partBDate || !(partBDate instanceof Date) || isNaN(partBDate.getTime())) {
     return statusEnum.NORMAL;
   }
   
