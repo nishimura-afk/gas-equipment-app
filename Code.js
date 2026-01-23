@@ -33,39 +33,17 @@ function getDashboardData() {
     )
     .map(row => `${row[1]}_${row[2]}`);
 
-  // 本体更新に紐づく部品更新の設備IDマッピング
-  const relatedPartsMapping = {
-    'PUMP-G-01': ['PARTS-PUMP-1Y', 'PARTS-PUMP-4Y'], // ガソリン計量機 → 消耗品・4年部品
-    'PUMP-K-01': ['PARTS-K-PANEL-7Y'],                // 灯油計量機 → 灯油パネル
-    'POS-01': ['PARTS-SEAL-3Y', 'CHG-01']             // POS → シール・カバー
-  };
-
-  // 本体更新案件がある場合、関連する部品更新設備も除外リストに追加
-  const extendedIgnoreList = new Set(ignoreActions);
-  bodyReplacementProjects.forEach(key => {
-    const [locCode, eqId] = key.split('_');
-    const relatedParts = relatedPartsMapping[eqId];
-    if (relatedParts) {
-      relatedParts.forEach(partId => {
-        extendedIgnoreList.add(`${locCode}_${partId}`);
-      });
-    }
-  });
-
   const notices = data.filter(m => {
     const equipmentKey = `${m['拠点コード']}_${m['設備ID']}`;
     
-    // 既に案件化されているもの、または本体更新案件に紐づく部品更新は除外
-    if (extendedIgnoreList.has(equipmentKey)) return false;
+    // 既に案件化されているものは除外
+    if (ignoreActions.includes(equipmentKey)) return false;
     
     // 本体入れ替え案件がある場合、消耗品アラートは除外
     if (bodyReplacementProjects.includes(equipmentKey) && 
         m['部品Aステータス'] !== config.STATUS.NORMAL) {
       return false;
     }
-    
-    // 部材更新はダッシュボードに表示しない
-    if (m['カテゴリ'] === '部材更新') return false;
     
     // その他のアラート判定
     return m['本体ステータス'] !== config.STATUS.NORMAL || 

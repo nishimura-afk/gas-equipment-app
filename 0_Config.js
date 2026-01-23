@@ -247,7 +247,7 @@ const SHEET_NAMES = {
     
     'REPLACE_FIRE_EXTINGUISHER': { 
       category: '本体更新', 
-      years: 10, 
+      years: 11, 
       label: '消火器更新', 
       searchKey: '消火器', 
       suffix: 'FIRE-EXT-01',
