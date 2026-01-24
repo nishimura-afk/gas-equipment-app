@@ -101,32 +101,8 @@
 
   <!-- 4月実施一括発注アラート -->
   <div class="bg-white rounded-lg border-2 border-blue-200 shadow-md overflow-hidden">
-    <div class="bg-blue-50 p-3 border-b border-blue-200 flex justify-between items-center">
+    <div class="bg-blue-50 p-3 border-b border-blue-200">
       <h3 class="text-lg font-bold text-blue-800"><i class="fas fa-calendar-alt mr-2"></i>【4月実施】定期部品交換・一括発注</h3>
-      <span class="text-xs bg-white px-2 py-1 rounded text-blue-600 font-bold border border-blue-200" id="count-parts">0件</span>
-    </div>
-    <div class="flex justify-between items-center p-3 bg-blue-50 border-b">
-      <div class="flex gap-2">
-        <button onclick="selectAllParts()" class="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50">
-          <i class="fas fa-check-square mr-1"></i>すべて選択
-        </button>
-        <button onclick="deselectAllParts()" class="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50">
-          <i class="fas fa-square mr-1"></i>選択解除
-        </button>
-      </div>
-      <div class="flex gap-3 items-center">
-        <span class="text-xs font-bold text-blue-600" id="parts-selected-count">0件選択中</span>
-        <button onclick="bulkCreateProjectsParts()" 
-                class="px-4 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:bg-gray-400"
-                id="btn-bulk-project-parts" disabled>
-          <i class="fas fa-clipboard-list mr-1"></i>選択した案件を作成
-        </button>
-        <button onclick="bulkCreateEmailsParts()" 
-                class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
-                id="btn-bulk-email-parts" disabled>
-          <i class="fas fa-envelope mr-1"></i>選択した案件のメール作成
-        </button>
-      </div>
     </div>
     <div id="bulk-order-alerts" class="divide-y divide-blue-100">
       <div class="p-4 text-center text-gray-400 text-sm">読み込み中...</div>
@@ -532,10 +508,6 @@ function loadAllBulkOrderAlerts() {
           if (!hasAnyAlert) {
             container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
           }
-          
-          // 件数を更新
-          updatePartsCount();
-          updatePartsSelection();
         })
         .withFailureHandler(function(error) {
           console.error('❌ getAllBulkOrderInfo failed:', error);
@@ -554,40 +526,42 @@ function loadAllBulkOrderAlerts() {
 function createBulkAlertDiv(info, type) {
   const div = document.createElement('div');
   div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition';
-  div.dataset.equipmentId = info.config.id;
+  
+  let storeList = '';
+  if (info.targetStores && info.targetStores.length > 0) {
+    if (info.targetStores.length <= 8) {
+      storeList = info.targetStores.map(function(s) { return s.name; }).join(', ');
+    } else {
+      storeList = info.targetStores.slice(0, 5).map(function(s) { return s.name; }).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
+    }
+  }
   
   const equipmentId = info.config.id;
   
-  // 店舗リストをチェックボックス付きで作成
-  let storeListHtml = '';
-  if (info.targetStores && info.targetStores.length > 0) {
-    storeListHtml = '<div class="mt-2 space-y-1">';
-    info.targetStores.forEach(function(store) {
-      const storeKey = `${equipmentId}_${store.code}`;
-      storeListHtml += `
-        <label class="flex items-center text-sm text-blue-700 hover:bg-blue-100 p-1 rounded cursor-pointer">
-          <input type="checkbox" class="parts-checkbox accent-blue-600 mr-2" 
-                 data-equipment-id="${equipmentId}"
-                 data-loc-code="${store.code}"
-                 data-loc-name="${store.name}"
-                 data-equipment-name="${info.config.name}"
-                 value="${storeKey}"
-                 onchange="updatePartsSelection()">
-          <span>${store.name}</span>
-        </label>
-      `;
-    });
-    storeListHtml += '</div>';
-  }
+  const buttons = `
+    <button onclick="showBulkEmailDraftWithGmail('${equipmentId}')" 
+            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-envelope mr-1"></i>メール下書き
+    </button>
+    <button onclick="createBulkOrderProjectFor('${equipmentId}')" 
+            class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
+      <i class="fas fa-clipboard-list mr-1"></i>案件作成
+    </button>
+  `;
   
   div.innerHTML = `
     <div class="flex items-start justify-between mb-2">
       <div class="flex-1">
         <div class="text-base font-bold text-blue-900 mb-1">
-          ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
+          ${info.config.emoji || ''} ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
         </div>
-        ${storeListHtml}
+        <div class="text-sm text-blue-700 ml-7 mt-1">
+          対象: ${storeList}
+        </div>
       </div>
+    </div>
+    <div class="flex gap-2 ml-7 mt-2">
+      ${buttons}
     </div>
   `;
   
