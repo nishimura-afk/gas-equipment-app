@@ -101,8 +101,32 @@
 
   <!-- 4月実施一括発注アラート -->
   <div class="bg-white rounded-lg border-2 border-blue-200 shadow-md overflow-hidden">
-    <div class="bg-blue-50 p-3 border-b border-blue-200">
+    <div class="bg-blue-50 p-3 border-b border-blue-200 flex justify-between items-center">
       <h3 class="text-lg font-bold text-blue-800"><i class="fas fa-calendar-alt mr-2"></i>【4月実施】定期部品交換・一括発注</h3>
+      <span class="text-xs bg-white px-2 py-1 rounded text-blue-600 font-bold border border-blue-200" id="count-parts">0件</span>
+    </div>
+    <div class="flex justify-between items-center p-3 bg-blue-50 border-b">
+      <div class="flex gap-2">
+        <button onclick="selectAllParts()" class="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50">
+          <i class="fas fa-check-square mr-1"></i>すべて選択
+        </button>
+        <button onclick="deselectAllParts()" class="text-xs px-3 py-1 bg-white border rounded hover:bg-gray-50">
+          <i class="fas fa-square mr-1"></i>選択解除
+        </button>
+      </div>
+      <div class="flex gap-3 items-center">
+        <span class="text-xs font-bold text-blue-600" id="parts-selected-count">0件選択中</span>
+        <button onclick="bulkCreateProjectsParts()" 
+                class="px-4 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:bg-gray-400"
+                id="btn-bulk-project-parts" disabled>
+          <i class="fas fa-clipboard-list mr-1"></i>選択した案件を作成
+        </button>
+        <button onclick="bulkCreateEmailsParts()" 
+                class="px-4 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:bg-gray-400"
+                id="btn-bulk-email-parts" disabled>
+          <i class="fas fa-envelope mr-1"></i>選択した案件のメール作成
+        </button>
+      </div>
     </div>
     <div id="bulk-order-alerts" class="divide-y divide-blue-100">
       <div class="p-4 text-center text-gray-400 text-sm">読み込み中...</div>
@@ -508,6 +532,10 @@ function loadAllBulkOrderAlerts() {
           if (!hasAnyAlert) {
             container.innerHTML = '<div class="p-4 text-center text-gray-400 text-sm">4月実施予定の一括発注はありません</div>';
           }
+          
+          // 件数を更新
+          updatePartsCount();
+          updatePartsSelection();
         })
         .withFailureHandler(function(error) {
           console.error('❌ getAllBulkOrderInfo failed:', error);
@@ -526,29 +554,31 @@ function loadAllBulkOrderAlerts() {
 function createBulkAlertDiv(info, type) {
   const div = document.createElement('div');
   div.className = 'p-4 border-b border-blue-100 hover:bg-blue-50 transition';
-  
-  let storeList = '';
-  if (info.targetStores && info.targetStores.length > 0) {
-    if (info.targetStores.length <= 8) {
-      storeList = info.targetStores.map(function(s) { return s.name; }).join(', ');
-    } else {
-      storeList = info.targetStores.slice(0, 5).map(function(s) { return s.name; }).join(', ') + ' 他' + (info.targetStores.length - 5) + '店舗';
-    }
-  }
+  div.dataset.equipmentId = info.config.id;
   
   const equipmentId = info.config.id;
   
-  // ノズルカバー用と標準用で統一
-  const buttons = `
-    <button onclick="showBulkEmailDraftWithGmail('${equipmentId}')" 
-            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-envelope mr-1"></i>メール下書き
-    </button>
-    <button onclick="createBulkOrderProjectFor('${equipmentId}')" 
-            class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-xs transition shadow">
-      <i class="fas fa-clipboard-list mr-1"></i>案件作成
-    </button>
-  `;
+  // 店舗リストをチェックボックス付きで作成
+  let storeListHtml = '';
+  if (info.targetStores && info.targetStores.length > 0) {
+    storeListHtml = '<div class="mt-2 space-y-1">';
+    info.targetStores.forEach(function(store) {
+      const storeKey = `${equipmentId}_${store.code}`;
+      storeListHtml += `
+        <label class="flex items-center text-sm text-blue-700 hover:bg-blue-100 p-1 rounded cursor-pointer">
+          <input type="checkbox" class="parts-checkbox accent-blue-600 mr-2" 
+                 data-equipment-id="${equipmentId}"
+                 data-loc-code="${store.code}"
+                 data-loc-name="${store.name}"
+                 data-equipment-name="${info.config.name}"
+                 value="${storeKey}"
+                 onchange="updatePartsSelection()">
+          <span>${store.name}</span>
+        </label>
+      `;
+    });
+    storeListHtml += '</div>';
+  }
   
   div.innerHTML = `
     <div class="flex items-start justify-between mb-2">
@@ -556,13 +586,8 @@ function createBulkAlertDiv(info, type) {
         <div class="text-base font-bold text-blue-900 mb-1">
           ${info.config.name} (${info.targetYear}年4月実施予定) - ${info.targetCount}店舗
         </div>
-        <div class="text-sm text-blue-700 ml-7 mt-1">
-          対象: ${storeList}
-        </div>
+        ${storeListHtml}
       </div>
-    </div>
-    <div class="flex gap-2 ml-7 mt-2">
-      ${buttons}
     </div>
   `;
   
@@ -903,6 +928,123 @@ function closeBulkEmailDraftModal() {
   if (window.currentBulkEmailModal) {
     document.body.removeChild(window.currentBulkEmailModal);
     window.currentBulkEmailModal = null;
+  }
+}
+
+// ========================================
+// 定期部品交換セクション - チェックボックス操作
+// ========================================
+
+function updatePartsCount() {
+  const allCheckboxes = document.querySelectorAll('.parts-checkbox');
+  const count = allCheckboxes.length;
+  const countElement = document.getElementById('count-parts');
+  if (countElement) {
+    countElement.textContent = count + '件';
+  }
+}
+
+function updatePartsSelection() {
+  const checked = document.querySelectorAll('.parts-checkbox:checked');
+  const count = checked.length;
+  const countElement = document.getElementById('parts-selected-count');
+  const btnProject = document.getElementById('btn-bulk-project-parts');
+  const btnEmail = document.getElementById('btn-bulk-email-parts');
+  
+  if (countElement) {
+    countElement.textContent = `${count}件選択中`;
+  }
+  if (btnProject) btnProject.disabled = (count === 0);
+  if (btnEmail) btnEmail.disabled = (count === 0);
+}
+
+function selectAllParts() {
+  document.querySelectorAll('.parts-checkbox').forEach(cb => cb.checked = true);
+  updatePartsSelection();
+}
+
+function deselectAllParts() {
+  document.querySelectorAll('.parts-checkbox').forEach(cb => cb.checked = false);
+  updatePartsSelection();
+}
+
+function bulkCreateProjectsParts() {
+  const checked = Array.from(document.querySelectorAll('.parts-checkbox:checked'));
+  if (checked.length === 0) return;
+  
+  if (!confirm(`${checked.length}件の案件を作成しますか?`)) return;
+  
+  showLoading(true);
+  let completed = 0;
+  
+  checked.forEach((cb) => {
+    const equipmentId = cb.dataset.equipmentId;
+    const locCode = cb.dataset.locCode;
+    const locName = cb.dataset.locName;
+    const eqName = cb.dataset.equipmentName;
+    
+    // 一括発注用の案件作成関数を呼び出す
+    google.script.run
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === checked.length) {
+          showLoading(false);
+          alert(`${completed}件の案件を作成しました`);
+          deselectAllParts();
+          dashboardInit(true);
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createBulkOrderProject(equipmentId);
+  });
+}
+
+function bulkCreateEmailsParts() {
+  const checked = Array.from(document.querySelectorAll('.parts-checkbox:checked'));
+  if (checked.length === 0) return;
+  
+  // 設備IDごとにグループ化
+  const equipmentGroups = {};
+  checked.forEach((cb) => {
+    const equipmentId = cb.dataset.equipmentId;
+    if (!equipmentGroups[equipmentId]) {
+      equipmentGroups[equipmentId] = [];
+    }
+    equipmentGroups[equipmentId].push({
+      locCode: cb.dataset.locCode,
+      locName: cb.dataset.locName
+    });
+  });
+  
+  if (!confirm(`${checked.length}件のメール下書きを作成しますか?`)) return;
+  
+  showLoading(true);
+  let completed = 0;
+  const total = Object.keys(equipmentGroups).length;
+  
+  // 設備IDごとにメール下書きを作成
+  for (const equipmentId in equipmentGroups) {
+    const stores = equipmentGroups[equipmentId];
+    const storeNames = stores.map(s => s.locName).join(', ');
+    
+    // 個別のメール下書きを作成（設備IDと店舗リストを渡す）
+    google.script.run
+      .withSuccessHandler(() => {
+        completed++;
+        if (completed === total) {
+          showLoading(false);
+          alert(`${total}件のメール下書きを作成しました`);
+          deselectAllParts();
+        }
+      })
+      .withFailureHandler((error) => {
+        showLoading(false);
+        alert(`エラー: ${error}`);
+      })
+      .createBulkOrderGmailDraft(equipmentId);
   }
 }
 

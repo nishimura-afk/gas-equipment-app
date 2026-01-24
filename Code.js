@@ -33,11 +33,42 @@ function getDashboardData() {
     )
     .map(row => `${row[1]}_${row[2]}`);
 
+  // 本体更新が案件化されている拠点を抽出（定期部品交換の除外用）
+  const gasBodyReplacementLocations = new Set();
+  const keroseneBodyReplacementLocations = new Set();
+  
+  scheduleData.slice(1).forEach(row => {
+    if (row[5] !== config.PROJECT_STATUS.COMPLETED && row[5] !== config.PROJECT_STATUS.CANCELLED) {
+      const locCode = row[1];
+      const eqId = row[2];
+      
+      // ガソリン計量機本体更新
+      if (eqId && (eqId.includes('PUMP-G-01') || eqId === 'REPLACE_GAS_PUMP')) {
+        gasBodyReplacementLocations.add(locCode);
+      }
+      
+      // 灯油計量機更新
+      if (eqId && (eqId.includes('PUMP-K-01') || eqId === 'REPLACE_KEROSENE_PUMP')) {
+        keroseneBodyReplacementLocations.add(locCode);
+      }
+    }
+  });
+
   const notices = data.filter(m => {
     const equipmentKey = `${m['拠点コード']}_${m['設備ID']}`;
     
     // 既に案件化されているものは除外
     if (ignoreActions.includes(equipmentKey)) return false;
+    
+    // ガソリン計量機部品(4年)の除外判定
+    if (m['設備ID'] === 'PARTS-PUMP-4Y' && gasBodyReplacementLocations.has(m['拠点コード'])) {
+      return false;
+    }
+    
+    // 灯油パネル更新の除外判定
+    if (m['設備ID'] === 'PARTS-K-PANEL-7Y' && keroseneBodyReplacementLocations.has(m['拠点コード'])) {
+      return false;
+    }
     
     // 本体入れ替え案件がある場合、消耗品アラートは除外
     if (bodyReplacementProjects.includes(equipmentKey) && 
@@ -281,6 +312,29 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
   var col = {};
   for (var i = 0; i < masterValues[0].length; i++) { col[masterValues[0][i]] = i; }
   
+  // 案件管理シートから本体更新が案件化されている拠点を取得
+  var scheduleSheet = ss.getSheetByName(config.SHEET_NAMES.SCHEDULE);
+  var scheduleData = scheduleSheet.getDataRange().getValues();
+  var gasBodyReplacementLocations = new Set();
+  var keroseneBodyReplacementLocations = new Set();
+  
+  scheduleData.slice(1).forEach(function(row) {
+    if (row[5] !== config.PROJECT_STATUS.COMPLETED && row[5] !== config.PROJECT_STATUS.CANCELLED) {
+      var locCode = row[1];
+      var eqId = row[2];
+      
+      // ガソリン計量機本体更新
+      if (eqId && (eqId.indexOf('PUMP-G-01') >= 0 || eqId === 'REPLACE_GAS_PUMP')) {
+        gasBodyReplacementLocations.add(locCode);
+      }
+      
+      // 灯油計量機更新
+      if (eqId && (eqId.indexOf('PUMP-K-01') >= 0 || eqId === 'REPLACE_KEROSENE_PUMP')) {
+        keroseneBodyReplacementLocations.add(locCode);
+      }
+    }
+  });
+  
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
@@ -297,6 +351,17 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
     var partADate = row[col['部品A交換日']];
     
     if (!locCode || !locName) continue;
+    
+    // ガソリン計量機部品(4年)の除外判定
+    if (eqId === 'PARTS-PUMP-4Y' && gasBodyReplacementLocations.has(locCode)) {
+      continue;
+    }
+    
+    // 灯油パネル更新の除外判定
+    if (eqId === 'PARTS-K-PANEL-7Y' && keroseneBodyReplacementLocations.has(locCode)) {
+      continue;
+    }
+    
     var isMatch = (eqId.indexOf(equipmentId) >= 0) || (searchKey && eqName.indexOf(searchKey) >= 0);
     
     if (isMatch && installDate instanceof Date && !isNaN(installDate.getTime())) {
