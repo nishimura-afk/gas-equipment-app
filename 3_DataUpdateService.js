@@ -104,19 +104,52 @@ function createVendorBatchDrafts() {
         body += `以下の設備につきまして、見積もりをお願いしたく存じます。\n\n`;
     }
 
+    // 店舗ごとにグループ化
+    const storeGroups = {};
     v.items.forEach(i => {
+      const locCode = i['拠点コード'];
+      const locName = i['拠点名'];
+      
+      if (!storeGroups[locCode]) {
+        storeGroups[locCode] = {
+          name: locName,
+          items: []
+        };
+      }
+      
       let eqDisplayName = i['設備名'];
-      if (eqDisplayName.includes('釣銭機カバー')) eqDisplayName = eqDisplayName.replace('釣銭機カバー', '投入/取出し口のプラスチックカバー');
-      if (eqDisplayName.includes('パネル')) eqDisplayName = eqDisplayName.replace('パネル', 'タッチパネル');
+      if (eqDisplayName.includes('釣銭機カバー')) {
+        eqDisplayName = eqDisplayName.replace('釣銭機カバー', '投入/取出し口のプラスチックカバー');
+      }
+      if (eqDisplayName.includes('パネル')) {
+        eqDisplayName = eqDisplayName.replace('パネル', 'タッチパネル');
+      }
+      
+      storeGroups[locCode].items.push({
+        name: eqDisplayName,
+        spec: i['spec'],
+        memo: i['nextWorkMemo'],
+        locCode: locCode,
+        equipmentId: i['設備ID']
+      });
+    });
 
-      body += `■ ${i['拠点名']}\n`;
-      body += `・設備: ${eqDisplayName}\n`;
-      if (i['spec']) body += `・型式: ${i['spec']}\n`;
-      if (i['nextWorkMemo']) body += `・備考: ${i['nextWorkMemo']}\n`;
+    // 店舗ごとにまとめて出力
+    Object.keys(storeGroups).sort().forEach(locCode => {
+      const store = storeGroups[locCode];
+      body += `■ セルフィックス${store.name}\n`;
+      
+      store.items.forEach(item => {
+        body += `・${item.name}\n`;
+        if (item.spec) body += `  型式: ${item.spec}\n`;
+        if (item.memo) body += `  備考: ${item.memo}\n`;
+        
+        // 案件シートに登録
+        const uniqueId = Utilities.getUuid();
+        scheduleSheet.appendRow([uniqueId, item.locCode, item.equipmentId, '発注', '', config.PROJECT_STATUS.ORDERED, '', v.name]);
+      });
+      
       body += `\n`;
-
-      const uniqueId = Utilities.getUuid();
-      scheduleSheet.appendRow([uniqueId, i['拠点コード'], i['設備ID'], '発注', '', config.PROJECT_STATUS.ORDERED, '', v.name]);
     });
 
     body += `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
@@ -273,7 +306,19 @@ function createVendorDraftForSelected(vendorKey, selectedItemIds) {
   let body = 'いつもお世話になっております。\n日商有田株式会社西村です。\n\n';
   body += '以下の設備につきまして、見積もりをお願いしたく存じます。\n\n';
   
+  // 店舗ごとにグループ化
+  const storeGroups = {};
   selectedItems.forEach(item => {
+    const locCode = item['拠点コード'];
+    const locName = item['拠点名'];
+    
+    if (!storeGroups[locCode]) {
+      storeGroups[locCode] = {
+        name: locName,
+        items: []
+      };
+    }
+    
     let eqDisplayName = item['設備名'];
     if (eqDisplayName.includes('釣銭機カバー')) {
       eqDisplayName = eqDisplayName.replace('釣銭機カバー', '投入/取出し口のプラスチックカバー');
@@ -282,10 +327,26 @@ function createVendorDraftForSelected(vendorKey, selectedItemIds) {
       eqDisplayName = eqDisplayName.replace('パネル', 'タッチパネル');
     }
     
-    body += `■ ${item['拠点名']}\n`;
-    body += `・設備: ${eqDisplayName}\n`;
-    if (item['spec']) body += `・型式: ${item['spec']}\n`;
-    if (item['nextWorkMemo']) body += `・備考: ${item['nextWorkMemo']}\n`;
+    storeGroups[locCode].items.push({
+      name: eqDisplayName,
+      spec: item['spec'],
+      memo: item['nextWorkMemo'],
+      locCode: locCode,
+      equipmentId: item['設備ID']
+    });
+  });
+
+  // 店舗ごとにまとめて出力
+  Object.keys(storeGroups).sort().forEach(locCode => {
+    const store = storeGroups[locCode];
+    body += `■ セルフィックス${store.name}\n`;
+    
+    store.items.forEach(item => {
+      body += `・${item.name}\n`;
+      if (item.spec) body += `  型式: ${item.spec}\n`;
+      if (item.memo) body += `  備考: ${item.memo}\n`;
+    });
+    
     body += '\n';
   });
   
@@ -300,18 +361,21 @@ function createVendorDraftForSelected(vendorKey, selectedItemIds) {
   
   // 案件シートに登録
   const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
-  selectedItems.forEach(item => {
-    const uniqueId = Utilities.getUuid();
-    scheduleSheet.appendRow([
-      uniqueId,
-      item['拠点コード'],
-      item['設備ID'],
-      '見積依頼',
-      '',
-      config.PROJECT_STATUS.ESTIMATE_REQ,
-      '',
-      vendor.name
-    ]);
+  Object.keys(storeGroups).forEach(locCode => {
+    const store = storeGroups[locCode];
+    store.items.forEach(item => {
+      const uniqueId = Utilities.getUuid();
+      scheduleSheet.appendRow([
+        uniqueId,
+        item.locCode,
+        item.equipmentId,
+        '見積依頼',
+        '',
+        config.PROJECT_STATUS.ESTIMATE_REQ,
+        '',
+        vendor.name
+      ]);
+    });
   });
   
   return {
