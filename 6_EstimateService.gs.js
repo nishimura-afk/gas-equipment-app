@@ -1,6 +1,7 @@
 /**
- * 6_EstimateService.gs v1.2
+ * 6_EstimateService.gs v1.3
  * Gemini API版 AI自動読み取り機能
+ * セキュリティ改善版：APIキーはスクリプトプロパティから取得
  */
 
 /**
@@ -127,16 +128,15 @@ function getEstimatesByProject(projectId) {
 /**
  * PDFから見積情報を自動抽出（Gemini API使用）
  * @param {string} pdfFileId - PDFファイルのID
- * @param {string} fileName - ファイル名（オプション、ログ用）
  * @return {Object} {success: boolean, data?: Object, message?: string}
  */
-function extractEstimateFromPDF(pdfFileId, fileName) {
+function extractEstimateFromPDF(pdfFileId) {
   try {
     const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
     if (!apiKey) {
       return {
         success: false,
-        message: 'GEMINI_API_KEYが設定されていません'
+        message: 'GEMINI_API_KEYが設定されていません。setGeminiApiKeyFromUI()を実行してください。'
       };
     }
     
@@ -266,33 +266,169 @@ function saveEstimate(estimateData, details) {
   }
 }
 
-
 /**
- * Gemini APIキーを設定する（初回のみ実行）
- * @param {string} apiKey - Gemini APIキー
+ * 抽出した見積データをスプレッドシートに保存
+ * @param {Object} result - extractEstimateFromPDF()の戻り値 {success, data}
+ * @param {Object} fileInfo - {id, name, url}
+ * @param {Object} projectInfo - 案件情報（なしの場合はnull）
+ * @return {string|null} 見積ID（案件なしの場合はnull）
  */
-function setGeminiApiKey(apiKey) {
-  if (!apiKey) {
-    Logger.log('❌ APIキーが指定されていません');
-    return;
+function saveEstimateToSheet(result, fileInfo, projectInfo) {
+  if (!result || !result.success) {
+    throw new Error('抽出データが不正です');
   }
-  PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', apiKey);
-  Logger.log('✅ APIキーを設定しました');
+  
+  // 案件なしの場合はスプレッドシート保存をスキップ
+  if (projectInfo && projectInfo.type === 'NONE') {
+    Logger.log('案件なしのため、スプレッドシート保存をスキップ');
+    return null;
+  }
+  
+  const data = result.data;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 見積IDを生成（E + タイムスタンプ）
+  const estimateId = 'E' + new Date().getTime();
+  
+  // 案件情報の取得
+  let projectId = '';
+  let locationCode = '';
+  let locationName = '';
+  let equipmentId = '';
+  let equipmentName = '';
+  
+  if (projectInfo && projectInfo.id) {
+    // 案件情報が提供されている場合
+    projectId = projectInfo.id;
+    locationCode = projectInfo.locCode || '';
+    locationName = projectInfo.locName || '';
+    equipmentId = projectInfo.eqId || '';
+    equipmentName = projectInfo.eqName || '';
+  } else {
+    // ファイル名から推測
+    const activeProjects = getAllActiveProjects();
+    const allEquipments = getEquipmentListCached();
+    const suggestion = suggestProjectFromFileName(fileInfo.name, activeProjects, allEquipments);
+    
+    if (suggestion) {
+      projectId = suggestion.id || '';
+      locationCode = suggestion.locCode || '';
+      locationName = suggestion.locName || '';
+      equipmentId = suggestion.eqId || '';
+      equipmentName = suggestion.eqName || '';
+    }
+  }
+  
+  // ファイル名から拠点名を抽出（suggestionがない場合のフォールバック）
+  if (!locationName) {
+    locationName = extractLocationNameFromFileName(fileInfo.name);
+  }
+  
+  // 見積比較シートに保存
+  const compareSheet = ss.getSheetByName('見積比較');
+  const compareRow = [
+    estimateId,                           // 見積ID
+    projectId,                            // 案件ID
+    locationCode,                         // 拠点コード
+    locationName,                         // 拠点名
+    equipmentId,                          // 設備ID
+    equipmentName,                        // 設備名
+    data.vendor || '',                    // 業者名
+    data.estimateDate || '',              // 見積日
+    data.amountExcludingTax || 0,         // 総額(税抜)
+    data.consumptionTax || 0,             // 消費税
+    data.totalAmount || 0,                // 総額(税込)
+    data.expenses || 0,                   // 諸経費
+    fileInfo.name,                        // PDFファイル名
+    fileInfo.url,                         // PDFリンク
+    new Date()                            // 登録日
+  ];
+  compareSheet.appendRow(compareRow);
+  
+  // 見積明細シートに保存
+  const detailSheet = ss.getSheetByName('見積明細');
+  if (data.details && data.details.length > 0) {
+    const detailRows = data.details.map((item, index) => [
+      estimateId,                         // 見積ID
+      index + 1,                          // 行番号
+      item.itemName || '',                // 項目名
+      item.unitPrice || 0,                // 単価
+      item.quantity || 0,                 // 数量
+      item.unit || '',                    // 単位
+      item.subtotal || 0,                 // 小計
+      item.note || ''                     // 備考
+    ]);
+    
+    detailRows.forEach(row => detailSheet.appendRow(row));
+  }
+  
+  Logger.log('✅ スプレッドシートに保存完了: ' + estimateId);
+  return estimateId;
 }
 
 /**
- * APIキーが正しく設定されているか確認
+ * ファイル名から拠点名を抽出
+ * @param {string} fileName - ファイル名
+ * @return {string} 拠点名（抽出できない場合は空文字）
+ */
+function extractLocationNameFromFileName(fileName) {
+  // 拠点マスタから拠点名リストを取得
+  const config = getConfig();
+  const locationSheet = getSheet(config.SHEET_NAMES.LOCATION_MASTER);
+  const data = locationSheet.getDataRange().getValues();
+  
+  // ヘッダー行を除く
+  for (let i = 1; i < data.length; i++) {
+    const locationName = data[i][1]; // 拠点名列
+    if (locationName && fileName.includes(locationName)) {
+      return locationName;
+    }
+  }
+  
+  return '';
+}
+
+/**
+ * Gemini APIキーを設定する（UI入力版）
+ * スプレッドシートから実行してください
+ */
+function setGeminiApiKeyFromUI() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    'Gemini APIキーの設定',
+    '新しいGemini APIキーを入力してください:\n(AIzaSy で始まる文字列)',
+    ui.ButtonSet.OK_CANCEL
+  );
+  
+  if (response.getSelectedButton() === ui.Button.OK) {
+    const apiKey = response.getResponseText().trim();
+    
+    if (apiKey && apiKey.startsWith('AIzaSy')) {
+      PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', apiKey);
+      ui.alert('✅ APIキーを設定しました');
+    } else {
+      ui.alert('❌ 有効なAPIキーを入力してください\n\nAPIキーは "AIzaSy" で始まる必要があります。');
+    }
+  }
+}
+
+/**
+ * APIキーが設定されているか確認
  */
 function checkGeminiApiKey() {
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   
   if (apiKey) {
     Logger.log('✅ APIキーは設定されています');
-    Logger.log('キーの先頭: ' + apiKey.substring(0, 20) + '...');
+    Logger.log('キーの先頭: ' + apiKey.substring(0, 10) + '...');
+    return true;
   } else {
     Logger.log('❌ APIキーが設定されていません');
+    Logger.log('💡 setGeminiApiKeyFromUI() を実行して設定してください');
+    return false;
   }
 }
+
 /**
  * 見積PDF抽出のテスト
  */
@@ -338,7 +474,7 @@ function testEstimateSystem() {
 }
 
 /**
- * スプレッドシート保存テスト（修正版）
+ * スプレッドシート保存テスト
  */
 function testSaveEstimate() {
   Logger.log('=== スプレッドシート保存テスト ===');
@@ -400,120 +536,4 @@ function testSaveEstimate() {
     Logger.log('❌ 保存エラー: ' + error.message);
     Logger.log(error.stack);
   }
-}
-
-/**
- * ファイル名から拠点名を抽出
- * @param {string} fileName - ファイル名
- * @return {string} 拠点名（抽出できない場合は空文字）
- */
-function extractLocationNameFromFileName(fileName) {
-  if (!fileName) return '';
-  
-  // 拠点マスタから拠点名リストを取得
-  const config = getConfig();
-  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-  const locData = locSheet.getDataRange().getValues();
-  const locNames = [];
-  
-  for (let i = 1; i < locData.length; i++) {
-    if (locData[i][1]) { // 拠点名の列
-      locNames.push(locData[i][1]);
-    }
-  }
-  
-  // ファイル名に含まれる拠点名を検索
-  const normalized = fileName.normalize('NFKC');
-  for (let i = 0; i < locNames.length; i++) {
-    const locName = locNames[i];
-    if (normalized.includes(locName)) {
-      return locName;
-    }
-  }
-  
-  return '';
-}
-
-/**
- * 抽出した見積データをスプレッドシートに保存
- * @param {Object} result - extractEstimateFromPDF()の戻り値 {success, data}
- * @param {Object} fileInfo - {id, name, url}
- * @param {Object} projectInfo - 案件情報（なしの場合はnullまたは{type: 'NONE'}）
- * @return {string} 見積ID（案件なしの場合はnull）
- */
-function saveEstimateToSheet(result, fileInfo, projectInfo) {
-  if (!result || !result.success) {
-    throw new Error('抽出データが不正です');
-  }
-  
-  // 案件なしの場合はスプレッドシート保存をスキップ
-  if (projectInfo && projectInfo.type === 'NONE') {
-    Logger.log('案件なしのため、スプレッドシート保存をスキップ');
-    return null;
-  }
-  
-  const data = result.data;
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  // 見積IDを生成（E + タイムスタンプ）
-  const estimateId = 'E' + new Date().getTime();
-  
-  // ファイル名から案件情報を推測
-  const activeProjects = getAllActiveProjects();
-  const allEquipments = getEquipmentListCached();
-  const suggestion = suggestProjectFromFileName(fileInfo.name, activeProjects, allEquipments);
-  
-  // suggestionの値を取得（nullの場合は空の値を使用）
-  const projectId = suggestion ? suggestion.id || '' : '';
-  const locationCode = suggestion ? suggestion.locCode || '' : '';
-  let locationName = suggestion ? suggestion.locName || '' : '';
-  
-  // ファイル名から拠点名を抽出（suggestionがない場合のフォールバック）
-  if (!locationName) {
-    locationName = extractLocationNameFromFileName(fileInfo.name);
-  }
-  
-  const equipmentId = suggestion ? suggestion.eqId || '' : '';
-  const equipmentName = suggestion ? suggestion.eqName || '' : '';
-  
-  // 見積比較シートに保存
-  const compareSheet = ss.getSheetByName('見積比較');
-  const compareRow = [
-    estimateId,                           // 見積ID
-    projectId,                            // 案件ID
-    locationCode,                         // 拠点コード
-    locationName,                         // 拠点名
-    equipmentId,                          // 設備ID
-    equipmentName,                        // 設備名
-    data.vendor || '',                    // 業者名
-    data.estimateDate || '',              // 見積日
-    data.amountExcludingTax || 0,         // 総額(税抜)
-    data.consumptionTax || 0,             // 消費税
-    data.totalAmount || 0,                // 総額(税込)
-    data.expenses || 0,                   // 諸経費
-    fileInfo.name,                        // PDFファイル名
-    fileInfo.url,                         // PDFリンク
-    new Date()                            // 登録日
-  ];
-  compareSheet.appendRow(compareRow);
-  
-  // 見積明細シートに保存
-  const detailSheet = ss.getSheetByName('見積明細');
-  if (data.details && data.details.length > 0) {
-    const detailRows = data.details.map((item, index) => [
-      estimateId,                         // 見積ID
-      index + 1,                          // 行番号
-      item.itemName || '',                // 項目名
-      item.unitPrice || 0,                // 単価
-      item.quantity || 0,                 // 数量
-      item.unit || '',                    // 単位
-      item.subtotal || 0,                 // 小計
-      item.note || ''                     // 備考
-    ]);
-    
-    detailRows.forEach(row => detailSheet.appendRow(row));
-  }
-  
-  Logger.log('✅ スプレッドシートに保存完了: ' + estimateId);
-  return estimateId;
 }

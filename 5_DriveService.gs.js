@@ -98,273 +98,34 @@ function suggestProjectFromFileName(fileName, projects, equipments) {
 function executeImport(filesToImport) {
   const config = getConfig();
   const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  let rootFolder;
+  try { rootFolder = DriveApp.getFolderById(USER_DRIVE_ID); } catch(e) { rootFolder = DriveApp.getRootFolder(); }
+  const archiveFolders = rootFolder.getFoldersByName(ARCHIVE_FOLDER_NAME);
+  const archiveFolder = archiveFolders.hasNext() ? archiveFolders.next() : rootFolder.createFolder(ARCHIVE_FOLDER_NAME);
+  const locList = getStoreList();
+  const locMap = {};
+  locList.forEach(l => locMap[l.code] = l.name);
   let successCount = 0;
-  let errorCount = 0;
-  const errors = [];
 
   filesToImport.forEach(item => {
     try {
       const file = DriveApp.getFileById(item.fileId);
-      
-      // 1. PDF抽出（Gemini API）
-      Logger.log('PDF抽出開始: ' + file.getName());
-      const extractResult = extractEstimateFromPDF(item.fileId);
-      
-      if (!extractResult || !extractResult.success) {
-        Logger.log('PDF抽出失敗: ' + (extractResult ? extractResult.message : '不明なエラー'));
-        errors.push(file.getName() + ': 抽出失敗');
-        errorCount++;
-        return;
-      }
-      
-      // 2. 案件情報を構築
-      let projectInfo = null;
-      if (item.projectType === 'NONE') {
-        projectInfo = { type: 'NONE', id: null, locCode: null, eqId: null, locName: null, eqName: null };
-      } else if (item.projectType === 'NEW_PROJECT') {
-        // 新規案件として登録する場合
-        // ファイル名から推測して案件を作成
-        const activeProjects = getAllActiveProjects();
-        const allEquipments = getEquipmentListCached();
-        const suggestion = suggestProjectFromFileName(item.fileName || file.getName(), activeProjects, allEquipments);
-        
-        if (!suggestion || suggestion.type !== 'NEW') {
-          throw new Error('ファイル名から案件情報を推測できませんでした');
-        }
-        
-        // 新規案件を作成
-        const newProjectId = createNewProject({
-          locationCode: suggestion.locCode,
-          locationName: suggestion.locName,
-          equipmentId: suggestion.eqId,
-          equipmentName: suggestion.eqName,
-          workType: '見積受領',
-          status: config.PROJECT_STATUS.ESTIMATE_RCV
-        });
-        
-        projectInfo = {
-          type: 'EXISTING',
-          id: newProjectId,
-          locCode: suggestion.locCode,
-          locName: suggestion.locName,
-          eqId: suggestion.eqId,
-          eqName: suggestion.eqName
-        };
-      } else if (item.projectType === 'NEW') {
-        // 新規案件を作成
+      if (item.projectType === 'NEW') {
         const uniqueId = Utilities.getUuid();
         scheduleSheet.appendRow([uniqueId, item.locCode, item.eqId, '見積受領(インポート)', '', config.PROJECT_STATUS.ESTIMATE_RCV, '', '']);
-        
-        const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-        const locData = locSheet.getDataRange().getValues();
-        const locRow = locData.find(row => row[0] === item.locCode);
-        const locName = locRow ? locRow[1] : item.locCode;
-        
-        const equipmentList = getEquipmentListCached();
-        const eqRow = equipmentList.find(row => row['拠点コード'] === item.locCode && row['設備ID'] === item.eqId);
-        const eqName = eqRow ? eqRow['設備名'] : item.eqId;
-        
-        projectInfo = { type: 'NEW', id: uniqueId, locCode: item.locCode, eqId: item.eqId, locName: locName, eqName: eqName };
-      } else if (item.projectType === 'EXISTING') {
-        // 既存案件の情報を取得
-        const scheduleData = scheduleSheet.getDataRange().getValues();
-        const projectRow = scheduleData.find(row => row[0] === item.projectId);
-        if (projectRow) {
-          const locCode = projectRow[1];
-          const eqId = projectRow[2];
-          
-          const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-          const locData = locSheet.getDataRange().getValues();
-          const locRow = locData.find(row => row[0] === locCode);
-          const locName = locRow ? locRow[1] : locCode;
-          
-          const equipmentList = getEquipmentListCached();
-          const eqRow = equipmentList.find(row => row['拠点コード'] === locCode && row['設備ID'] === eqId);
-          const eqName = eqRow ? eqRow['設備名'] : eqId;
-          
-          projectInfo = { type: 'EXISTING', id: item.projectId, locCode: locCode, eqId: eqId, locName: locName, eqName: eqName };
-        }
       }
+      getSheet(config.SHEET_NAMES.HISTORY).appendRow([item.locCode, item.eqId, '見積書登録', new Date(), `File: ${file.getName()}\nUrl: ${file.getUrl()}`, '']);
       
-      // 3. 案件ありの場合のみスプレッドシート保存
-      if (projectInfo && projectInfo.type !== 'NONE') {
-        Logger.log('スプレッドシート保存開始');
-        const fileInfo = {
-          id: item.fileId,
-          name: file.getName(),
-          url: file.getUrl()
-        };
-        
-        try {
-          saveEstimateToSheet(extractResult, fileInfo, projectInfo);
-          Logger.log('スプレッドシート保存完了');
-        } catch (e) {
-          Logger.log('スプレッドシート保存エラー: ' + e.message);
-          errors.push(file.getName() + ': 保存エラー - ' + e.message);
-        }
-      } else {
-        Logger.log('案件なしのため、スプレッドシート保存をスキップ');
-      }
-      
-      // 4. PDFをリネームして処理済フォルダに移動（案件の有無に関わらず実行）
-      Logger.log('PDF移動開始');
-      const moveResult = moveAndRenameEstimatePDF(item.fileId, extractResult, projectInfo);
-      Logger.log('PDF移動完了: ' + moveResult.newName);
-      
-      // 5. 履歴に記録
-      const locCode = projectInfo ? projectInfo.locCode : '';
-      const eqId = projectInfo ? projectInfo.eqId : '';
-      getSheet(config.SHEET_NAMES.HISTORY).appendRow([
-        locCode, 
-        eqId, 
-        '見積書登録', 
-        new Date(), 
-        `File: ${moveResult.newName}\nUrl: ${moveResult.newUrl}`, 
-        ''
-      ]);
-      
+      const newName = `[${item.locCode}]${item.eqId}_見積_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd')}.pdf`;
+      file.setName(newName);
+      const shopName = locMap[item.locCode] || item.locCode;
+      const subFolders = archiveFolder.getFoldersByName(shopName);
+      const targetFolder = subFolders.hasNext() ? subFolders.next() : archiveFolder.createFolder(shopName);
+      file.moveTo(targetFolder);
       successCount++;
-    } catch (e) {
-      Logger.log('Import Error: ' + e.message);
-      Logger.log(e.stack);
-      errors.push(DriveApp.getFileById(item.fileId).getName() + ': ' + e.message);
-      errorCount++;
-    }
+    } catch (e) { console.error('Import Error', e); }
   });
-  
-  let message = `${successCount}件処理完了`;
-  if (errorCount > 0) {
-    message += `（${errorCount}件エラー）`;
-  }
-  
-  return { 
-    success: true, 
-    message: message,
-    errors: errors.length > 0 ? errors : null
-  };
-}
-
-/**
- * フォルダを取得または作成
- */
-function getOrCreateFolder(parentFolder, folderName) {
-  const folders = parentFolder.getFoldersByName(folderName);
-  return folders.hasNext() ? folders.next() : parentFolder.createFolder(folderName);
-}
-
-/**
- * ファイル名から設備名を抽出
- */
-function extractEquipmentNameFromFileName(fileName) {
-  if (!fileName) return '設備';
-  
-  // キーワードを検索
-  const keywords = ['トイレ', 'ポンプ', 'タンク', '計量機', '計量器', 'POS', 'LED', '洗車', '釣銭機', 'エアコン', '照明'];
-  const normalized = fileName.normalize('NFKC');
-  
-  for (let i = 0; i < keywords.length; i++) {
-    if (normalized.includes(keywords[i])) {
-      return keywords[i];
-    }
-  }
-  
-  return '設備';
-}
-
-/**
- * 見積PDFをリネームして処理済フォルダに移動
- * @param {string} fileId - PDFファイルのID
- * @param {Object} estimateData - 抽出データ {success, data}
- * @param {Object} projectInfo - 案件情報（なしの場合はnull）
- * @return {Object} {newName, newUrl}
- */
-function moveAndRenameEstimatePDF(fileId, estimateData, projectInfo) {
-  try {
-    const file = DriveApp.getFileById(fileId);
-    const data = estimateData.data;
-    
-    // 処理済フォルダを取得
-    const inboxFolder = DriveApp.getFolderById(USER_DRIVE_ID);
-    const parentFolders = inboxFolder.getParents();
-    if (!parentFolders.hasNext()) {
-      throw new Error('親フォルダが見つかりません');
-    }
-    const parentFolder = parentFolders.next();
-    const archiveFolders = parentFolder.getFoldersByName(ARCHIVE_FOLDER_NAME);
-    const archiveFolder = archiveFolders.hasNext() ? archiveFolders.next() : parentFolder.createFolder(ARCHIVE_FOLDER_NAME);
-    
-    // 年月フォルダを取得または作成
-    const estimateDate = data.estimateDate ? new Date(data.estimateDate) : new Date();
-    const year = estimateDate.getFullYear() + '年';
-    const month = String(estimateDate.getMonth() + 1).padStart(2, '0') + '月';
-    
-    const yearFolder = getOrCreateFolder(archiveFolder, year);
-    const monthFolder = getOrCreateFolder(yearFolder, month);
-    
-    // ファイル名を生成
-    let locationName = '';
-    let equipmentName = '';
-    
-    if (projectInfo && projectInfo.type !== 'NONE') {
-      // 案件情報から取得
-      if (projectInfo.type === 'EXISTING') {
-        const config = getConfig();
-        const scheduleData = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
-        const projectRow = scheduleData.find(row => row[0] === projectInfo.id);
-        if (projectRow) {
-          const locCode = projectRow[1];
-          const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-          const locData = locSheet.getDataRange().getValues();
-          const locRow = locData.find(row => row[0] === locCode);
-          locationName = locRow ? locRow[1] : locCode;
-          
-          const eqId = projectRow[2];
-          const equipmentList = getEquipmentListCached();
-          const eqRow = equipmentList.find(row => row['拠点コード'] === locCode && row['設備ID'] === eqId);
-          equipmentName = eqRow ? eqRow['設備名'] : eqId;
-        }
-      } else if (projectInfo.type === 'NEW') {
-        const config = getConfig();
-        const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-        const locData = locSheet.getDataRange().getValues();
-        const locRow = locData.find(row => row[0] === projectInfo.locCode);
-        locationName = locRow ? locRow[1] : projectInfo.locCode;
-        
-        const equipmentList = getEquipmentListCached();
-        const eqRow = equipmentList.find(row => row['拠点コード'] === projectInfo.locCode && row['設備ID'] === projectInfo.eqId);
-        equipmentName = eqRow ? eqRow['設備名'] : projectInfo.eqId;
-      }
-    }
-    
-    // 案件情報がない場合はファイル名から抽出
-    if (!locationName) {
-      locationName = extractLocationNameFromFileName(file.getName());
-    }
-    if (!equipmentName) {
-      equipmentName = extractEquipmentNameFromFileName(file.getName());
-    }
-    
-    // デフォルト値
-    if (!locationName) locationName = '不明';
-    if (!equipmentName) equipmentName = '設備';
-    
-    const vendor = data.vendor || '不明';
-    const dateStr = data.estimateDate ? data.estimateDate.replace(/-/g, '') : Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
-    
-    const newName = `${locationName}_${equipmentName}_${vendor}_見積_${dateStr}.pdf`;
-    
-    // ファイルを移動してリネーム
-    file.moveTo(monthFolder);
-    file.setName(newName);
-    
-    return {
-      newName: newName,
-      newUrl: file.getUrl()
-    };
-  } catch (e) {
-    Logger.log('PDF移動エラー: ' + e.message);
-    throw e;
-  }
+  return { success: true, message: `${successCount}件処理完了`, folderUrl: archiveFolder.getUrl() };
 }
 
 function uploadAndImport(data, fileName, mimeType, projectInfo) {
@@ -372,15 +133,6 @@ function uploadAndImport(data, fileName, mimeType, projectInfo) {
   const folder = DriveApp.getFolderById(folderInfo.id);
   const blob = Utilities.newBlob(Utilities.base64Decode(data), mimeType, fileName);
   const file = folder.createFile(blob);
-  
-  const importItem = { 
-    fileId: file.getId(), 
-    projectType: projectInfo.type, 
-    projectId: projectInfo.id, 
-    locCode: projectInfo.locCode, 
-    eqId: projectInfo.eqId,
-    fileName: projectInfo.fileName || fileName
-  };
-  
+  const importItem = { fileId: file.getId(), projectType: projectInfo.type, projectId: projectInfo.id, locCode: projectInfo.locCode, eqId: projectInfo.eqId };
   return executeImport([importItem]);
 }

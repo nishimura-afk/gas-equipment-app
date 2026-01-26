@@ -84,10 +84,19 @@ function getDashboardData() {
   return { noticeCount: notices.length, normalCount: data.length - notices.length, noticeList: notices };
 }
 
-/**
- * 案件データを整形する共通関数
- */
-function formatProjectData(data, locMap, eqMap) {
+function getAllActiveProjects() {
+  const config = getConfig();
+  const data = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
+  if (data.length <= 1) return [];
+  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+  const locData = locSheet.getDataRange().getValues();
+  const locMap = {};
+  locData.slice(1).forEach(r => { if(r[0]) locMap[r[0]] = r[1]; });
+  const equipmentList = getEquipmentListCached();
+  const eqMap = {};
+  equipmentList.forEach(row => {
+    eqMap[`${row['拠点コード']}_${row['設備ID']}`] = row['設備名'] || row['設備ID'];
+  });
   return data.slice(1).map((r, i) => {
     const locCode = r[1];
     const eqId = r[2];
@@ -99,117 +108,11 @@ function formatProjectData(data, locMap, eqMap) {
       equipmentId: eqId,
       equipmentName: eqMap[key] || eqId,   
       workType: r[3],
-      scheduledDate: (r[4] instanceof Date) ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[4],
+      date: (r[4] instanceof Date) ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[4],
       status: r[5],
       rowNumber: i + 2
     };
-  });
-}
-
-/**
- * 進行中の案件を取得
- */
-function getActiveProjects() {
-  const config = getConfig();
-  const data = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
-  if (data.length <= 1) return [];
-  
-  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-  const locData = locSheet.getDataRange().getValues();
-  const locMap = {};
-  locData.slice(1).forEach(r => { if(r[0]) locMap[r[0]] = r[1]; });
-  
-  const equipmentList = getEquipmentListCached();
-  const eqMap = {};
-  equipmentList.forEach(row => {
-    eqMap[`${row['拠点コード']}_${row['設備ID']}`] = row['設備名'] || row['設備ID'];
-  });
-  
-  // 進行中のステータスを定義
-  const activeStatuses = [
-    config.PROJECT_STATUS.ESTIMATE_REQ,  // 見積依頼中
-    config.PROJECT_STATUS.ESTIMATE_RCV,  // 見積受領
-    config.PROJECT_STATUS.SCHEDULED,     // 日程確定
-    config.PROJECT_STATUS.ORDERED        // 発注済み
-  ];
-  
-  const allProjects = formatProjectData(data, locMap, eqMap);
-  
-  return allProjects.filter(p => 
-    p.status !== config.PROJECT_STATUS.COMPLETED && 
-    p.status !== config.PROJECT_STATUS.CANCELLED &&
-    activeStatuses.includes(p.status)
-  );
-}
-
-/**
- * 完了案件を取得
- */
-function getCompletedProjects() {
-  const config = getConfig();
-  const data = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
-  if (data.length <= 1) return [];
-  
-  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-  const locData = locSheet.getDataRange().getValues();
-  const locMap = {};
-  locData.slice(1).forEach(r => { if(r[0]) locMap[r[0]] = r[1]; });
-  
-  const equipmentList = getEquipmentListCached();
-  const eqMap = {};
-  equipmentList.forEach(row => {
-    eqMap[`${row['拠点コード']}_${row['設備ID']}`] = row['設備名'] || row['設備ID'];
-  });
-  
-  // 完了ステータスを定義
-  const completedStatuses = [
-    config.PROJECT_STATUS.COMPLETED,  // 完了
-    config.PROJECT_STATUS.CANCELLED    // 中止
-  ];
-  
-  const allProjects = formatProjectData(data, locMap, eqMap);
-  
-  return allProjects.filter(p => completedStatuses.includes(p.status));
-}
-
-/**
- * すべての案件を進行中・完了に分けて取得
- */
-function getAllActiveProjects() {
-  return {
-    active: getActiveProjects(),
-    completed: getCompletedProjects()
-  };
-}
-
-/**
- * 新規案件を案件管理シートに作成
- * @param {Object} projectData - 案件情報 {locationCode, locationName, equipmentId, equipmentName, workType, status}
- * @return {string} 新規案件ID
- */
-function createNewProject(projectData) {
-  const config = getConfig();
-  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
-  
-  // 新規案件IDを生成
-  const newProjectId = Utilities.getUuid();
-  
-  // 案件管理シートに追加
-  const newRow = [
-    newProjectId,                        // ID
-    projectData.locationCode || '',      // 拠点コード
-    projectData.equipmentId || '',       // 設備ID
-    projectData.workType || '見積受領',  // 作業内容
-    '',                                  // 予定日（空欄）
-    projectData.status || config.PROJECT_STATUS.ESTIMATE_RCV, // ステータス
-    '',                                  // カレンダーID（空欄）
-    ''                                   // 発注先（空欄）
-  ];
-  
-  scheduleSheet.appendRow(newRow);
-  
-  Logger.log('新規案件を作成: ' + newProjectId);
-  return newProjectId;
+  }).filter(p => p.status !== config.PROJECT_STATUS.COMPLETED && p.status !== config.PROJECT_STATUS.CANCELLED);
 }
 
 function getExchangeTargetsForUI() {
