@@ -126,8 +126,11 @@ function getEstimatesByProject(projectId) {
 
 /**
  * PDFから見積情報を自動抽出（Gemini API使用）
+ * @param {string} pdfFileId - PDFファイルのID
+ * @param {string} fileName - ファイル名（オプション、ログ用）
+ * @return {Object} {success: boolean, data?: Object, message?: string}
  */
-function extractEstimateFromPDF(pdfFileId) {
+function extractEstimateFromPDF(pdfFileId, fileName) {
   try {
     const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
     if (!apiKey) {
@@ -263,51 +266,16 @@ function saveEstimate(estimateData, details) {
   }
 }
 
-/**
- * テスト用: 手動でPDF解析を実行
- */
-function testExtractPDF() {
-  // テスト用のPDFファイルIDを指定
-  const testFileId = '1ZkGLJHHe14YKFAGTOHC1JrSNSI3q0xMq';
-  
-  const result = extractEstimateFromPDF(testFileId);
-  Logger.log(JSON.stringify(result, null, 2));
-}
-
-/**
- * 利用可能なGeminiモデルのリストを取得
- */
-function listAvailableModels() {
-  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey;
-  
-  const response = UrlFetchApp.fetch(url, {
-    method: 'get',
-    muteHttpExceptions: true
-  });
-  
-  const result = JSON.parse(response.getContentText());
-  
-  Logger.log('=== 利用可能なモデル一覧 ===');
-  
-  if (result.models) {
-    result.models.forEach(function(model) {
-      Logger.log('モデル名: ' + model.name);
-      Logger.log('表示名: ' + model.displayName);
-      Logger.log('サポート: ' + JSON.stringify(model.supportedGenerationMethods));
-      Logger.log('---');
-    });
-  } else {
-    Logger.log('エラー: ' + JSON.stringify(result));
-  }
-}
 
 /**
  * Gemini APIキーを設定する（初回のみ実行）
+ * @param {string} apiKey - Gemini APIキー
  */
-function setGeminiApiKey() {
-  const apiKey = 'AIzaSyB7vHNMb7N1oK91oHafav-Cbxbfe8mXITw'; // ここに取得したAPIキーを貼り付け
+function setGeminiApiKey(apiKey) {
+  if (!apiKey) {
+    Logger.log('❌ APIキーが指定されていません');
+    return;
+  }
   PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', apiKey);
   Logger.log('✅ APIキーを設定しました');
 }
@@ -389,14 +357,14 @@ function testSaveEstimate() {
   Logger.log('テストファイル: ' + testFile.getName());
   
   // 2. PDF抽出
-  const result = extractEstimateFromPDF(testFile.getId(), testFile.getName());
+  const result = extractEstimateFromPDF(testFile.getId());
   
   if (!result || !result.success) {
-    Logger.log('❌ 抽出失敗');
+    Logger.log('❌ 抽出失敗: ' + (result ? result.message : '不明なエラー'));
     return;
   }
   
-  const extractedData = result.data; // ← ここで data を取り出す
+  const extractedData = result.data;
   
   Logger.log('✅ 抽出成功');
   Logger.log('業者名: ' + extractedData.vendor);
@@ -411,7 +379,7 @@ function testSaveEstimate() {
       url: testFile.getUrl()
     };
     
-    const estimateId = saveEstimateToSheet(result, fileInfo); // result全体を渡す
+    const estimateId = saveEstimateToSheet(result, fileInfo);
     Logger.log('\n✅ 保存成功！');
     Logger.log('見積ID: ' + estimateId);
     
@@ -435,6 +403,38 @@ function testSaveEstimate() {
 }
 
 /**
+ * ファイル名から拠点名を抽出
+ * @param {string} fileName - ファイル名
+ * @return {string} 拠点名（抽出できない場合は空文字）
+ */
+function extractLocationNameFromFileName(fileName) {
+  if (!fileName) return '';
+  
+  // 拠点マスタから拠点名リストを取得
+  const config = getConfig();
+  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+  const locData = locSheet.getDataRange().getValues();
+  const locNames = [];
+  
+  for (let i = 1; i < locData.length; i++) {
+    if (locData[i][1]) { // 拠点名の列
+      locNames.push(locData[i][1]);
+    }
+  }
+  
+  // ファイル名に含まれる拠点名を検索
+  const normalized = fileName.normalize('NFKC');
+  for (let i = 0; i < locNames.length; i++) {
+    const locName = locNames[i];
+    if (normalized.includes(locName)) {
+      return locName;
+    }
+  }
+  
+  return '';
+}
+
+/**
  * 抽出した見積データをスプレッドシートに保存
  * @param {Object} result - extractEstimateFromPDF()の戻り値 {success, data}
  * @param {Object} fileInfo - {id, name, url}
@@ -452,14 +452,20 @@ function saveEstimateToSheet(result, fileInfo) {
   const estimateId = 'E' + new Date().getTime();
   
   // ファイル名から案件情報を推測
-  const activeProjects = getActiveProjects();
+  const activeProjects = getAllActiveProjects();
   const allEquipments = getEquipmentListCached();
   const suggestion = suggestProjectFromFileName(fileInfo.name, activeProjects, allEquipments);
   
   // suggestionの値を取得（nullの場合は空の値を使用）
   const projectId = suggestion ? suggestion.id || '' : '';
   const locationCode = suggestion ? suggestion.locCode || '' : '';
-  const locationName = suggestion ? suggestion.locName || '' : '';
+  let locationName = suggestion ? suggestion.locName || '' : '';
+  
+  // ファイル名から拠点名を抽出（suggestionがない場合のフォールバック）
+  if (!locationName) {
+    locationName = extractLocationNameFromFileName(fileInfo.name);
+  }
+  
   const equipmentId = suggestion ? suggestion.eqId || '' : '';
   const equipmentName = suggestion ? suggestion.eqName || '' : '';
   

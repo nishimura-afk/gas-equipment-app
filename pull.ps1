@@ -1,4 +1,4 @@
-# pull.ps1 - GAS側の変更をローカル・GitHubに反映
+g# pull.ps1 - GAS側の変更をローカル・GitHubに反映
 
 Write-Host "📥 GASから最新コードを取得しています..." -ForegroundColor Cyan
 
