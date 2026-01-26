@@ -438,11 +438,18 @@ function extractLocationNameFromFileName(fileName) {
  * 抽出した見積データをスプレッドシートに保存
  * @param {Object} result - extractEstimateFromPDF()の戻り値 {success, data}
  * @param {Object} fileInfo - {id, name, url}
- * @return {string} 見積ID
+ * @param {Object} projectInfo - 案件情報（なしの場合はnullまたは{type: 'NONE'}）
+ * @return {string} 見積ID（案件なしの場合はnull）
  */
-function saveEstimateToSheet(result, fileInfo) {
+function saveEstimateToSheet(result, fileInfo, projectInfo) {
   if (!result || !result.success) {
     throw new Error('抽出データが不正です');
+  }
+  
+  // 案件なしの場合はスプレッドシート保存をスキップ
+  if (projectInfo && projectInfo.type === 'NONE') {
+    Logger.log('案件なしのため、スプレッドシート保存をスキップ');
+    return null;
   }
   
   const data = result.data;

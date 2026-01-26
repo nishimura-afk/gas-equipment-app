@@ -97,6 +97,15 @@ function getAllActiveProjects() {
   equipmentList.forEach(row => {
     eqMap[`${row['拠点コード']}_${row['設備ID']}`] = row['設備名'] || row['設備ID'];
   });
+  
+  // 進行中のステータスを定義
+  const activeStatuses = [
+    config.PROJECT_STATUS.ESTIMATE_REQ,  // 見積依頼中
+    config.PROJECT_STATUS.ESTIMATE_RCV,  // 見積受領
+    config.PROJECT_STATUS.SCHEDULED,     // 日程確定
+    config.PROJECT_STATUS.ORDERED        // 発注済み
+  ];
+  
   return data.slice(1).map((r, i) => {
     const locCode = r[1];
     const eqId = r[2];
@@ -112,7 +121,11 @@ function getAllActiveProjects() {
       status: r[5],
       rowNumber: i + 2
     };
-  }).filter(p => p.status !== config.PROJECT_STATUS.COMPLETED && p.status !== config.PROJECT_STATUS.CANCELLED);
+  }).filter(p => 
+    p.status !== config.PROJECT_STATUS.COMPLETED && 
+    p.status !== config.PROJECT_STATUS.CANCELLED &&
+    activeStatuses.includes(p.status)
+  );
 }
 
 function getExchangeTargetsForUI() {

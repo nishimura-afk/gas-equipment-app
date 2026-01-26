@@ -85,13 +85,33 @@ let currentFiles = [];
 let allProjects = []; 
 
 function importInit() {
-  google.script.run.withSuccessHandler(list => {
-    allProjects = list.map(item => ({
-      val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
-      label: `【新規】${item['拠点名']} - ${item['設備名']}`
+  // 既存案件を取得
+  google.script.run.withSuccessHandler(projects => {
+    const existingProjects = projects.map(p => ({
+      val: `EXISTING:${p.id}`,
+      label: `【既存】${p.locName} - ${p.equipmentName} (${p.workType})`
     }));
-    scanInbox();
-  }).getEquipmentList();
+    
+    // 新規案件候補を取得
+    google.script.run.withSuccessHandler(list => {
+      const newProjects = list.map(item => ({
+        val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
+        label: `【新規】${item['拠点名']} - ${item['設備名']}`
+      }));
+      
+      // 案件なしオプションを追加
+      allProjects = [
+        ...existingProjects,
+        ...newProjects,
+        {
+          val: 'NO_PROJECT',
+          label: '💡 案件なし'
+        }
+      ];
+      
+      scanInbox();
+    }).getEquipmentList();
+  }).getAllActiveProjects();
 }
 
 function switchTab(tab) {
@@ -150,7 +170,9 @@ function renderFiles(res) {
       selectHtml += `<option disabled>──────────</option>`;
     }
     
-    allProjects.forEach(p => { selectHtml += `<option value="${p.val}">${p.label}</option>`; });
+    allProjects.forEach(p => { 
+      selectHtml += `<option value="${p.val}">${p.label}</option>`; 
+    });
     selectHtml += `</select>`;
 
     div.innerHTML = `
@@ -193,14 +215,25 @@ function execBulkImport() {
     if (!val) { error = true; select.classList.add('border-red-500'); }
     else {
       select.classList.remove('border-red-500');
-      const parts = val.split(':');
-      targets.push({
-        fileId: file.id,
-        projectType: parts[0],
-        projectId: parts[0]==='EXISTING'?parts[1]:null,
-        locCode: parts[0]==='NEW'?parts[1]:null,
-        eqId: parts[0]==='NEW'?parts[2]:null
-      });
+      
+      if (val === 'NO_PROJECT') {
+        targets.push({
+          fileId: file.id,
+          projectType: 'NONE',
+          projectId: null,
+          locCode: null,
+          eqId: null
+        });
+      } else {
+        const parts = val.split(':');
+        targets.push({
+          fileId: file.id,
+          projectType: parts[0],
+          projectId: parts[0]==='EXISTING'?parts[1]:null,
+          locCode: parts[0]==='NEW'?parts[1]:null,
+          eqId: parts[0]==='NEW'?parts[2]:null
+        });
+      }
     }
   });
 
@@ -235,6 +268,14 @@ function handleFileSelect(input) {
     op.innerText = p.label;
     sel.appendChild(op);
   });
+  
+  // 案件なしオプションを追加（まだ追加されていない場合）
+  if (!Array.from(sel.options).some(opt => opt.value === 'NO_PROJECT')) {
+    const noneOp = document.createElement('option');
+    noneOp.value = 'NO_PROJECT';
+    noneOp.innerText = '💡 案件なし';
+    sel.appendChild(noneOp);
+  }
 }
 
 function execUpload() {
@@ -242,13 +283,23 @@ function execUpload() {
   if(!sel.value) return alert('案件を選択してください');
   if(!uploadFile) return;
 
-  const parts = sel.value.split(':');
-  const projectInfo = {
-    type: parts[0],
-    id: parts[0]==='EXISTING'?parts[1]:null,
-    locCode: parts[0]==='NEW'?parts[1]:null,
-    eqId: parts[0]==='NEW'?parts[2]:null
-  };
+  let projectInfo;
+  if (sel.value === 'NO_PROJECT') {
+    projectInfo = {
+      type: 'NONE',
+      id: null,
+      locCode: null,
+      eqId: null
+    };
+  } else {
+    const parts = sel.value.split(':');
+    projectInfo = {
+      type: parts[0],
+      id: parts[0]==='EXISTING'?parts[1]:null,
+      locCode: parts[0]==='NEW'?parts[1]:null,
+      eqId: parts[0]==='NEW'?parts[2]:null
+    };
+  }
 
   showLoading(true);
   const reader = new FileReader();
