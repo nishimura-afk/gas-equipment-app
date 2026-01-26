@@ -84,14 +84,41 @@ function getDashboardData() {
   return { noticeCount: notices.length, normalCount: data.length - notices.length, noticeList: notices };
 }
 
-function getAllActiveProjects() {
+/**
+ * 案件データを整形する共通関数
+ */
+function formatProjectData(data, locMap, eqMap) {
+  return data.slice(1).map((r, i) => {
+    const locCode = r[1];
+    const eqId = r[2];
+    const key = `${locCode}_${eqId}`;
+    return {
+      id: r[0],
+      locCode: locCode,
+      locName: locMap[locCode] || locCode, 
+      equipmentId: eqId,
+      equipmentName: eqMap[key] || eqId,   
+      workType: r[3],
+      scheduledDate: (r[4] instanceof Date) ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[4],
+      status: r[5],
+      rowNumber: i + 2
+    };
+  });
+}
+
+/**
+ * 進行中の案件を取得
+ */
+function getActiveProjects() {
   const config = getConfig();
   const data = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
   if (data.length <= 1) return [];
+  
   const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
   const locData = locSheet.getDataRange().getValues();
   const locMap = {};
   locData.slice(1).forEach(r => { if(r[0]) locMap[r[0]] = r[1]; });
+  
   const equipmentList = getEquipmentListCached();
   const eqMap = {};
   equipmentList.forEach(row => {
@@ -106,26 +133,53 @@ function getAllActiveProjects() {
     config.PROJECT_STATUS.ORDERED        // 発注済み
   ];
   
-  return data.slice(1).map((r, i) => {
-    const locCode = r[1];
-    const eqId = r[2];
-    const key = `${locCode}_${eqId}`;
-    return {
-      id: r[0],
-      locCode: locCode,
-      locName: locMap[locCode] || locCode, 
-      equipmentId: eqId,
-      equipmentName: eqMap[key] || eqId,   
-      workType: r[3],
-      date: (r[4] instanceof Date) ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[4],
-      status: r[5],
-      rowNumber: i + 2
-    };
-  }).filter(p => 
+  const allProjects = formatProjectData(data, locMap, eqMap);
+  
+  return allProjects.filter(p => 
     p.status !== config.PROJECT_STATUS.COMPLETED && 
     p.status !== config.PROJECT_STATUS.CANCELLED &&
     activeStatuses.includes(p.status)
   );
+}
+
+/**
+ * 完了案件を取得
+ */
+function getCompletedProjects() {
+  const config = getConfig();
+  const data = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
+  if (data.length <= 1) return [];
+  
+  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+  const locData = locSheet.getDataRange().getValues();
+  const locMap = {};
+  locData.slice(1).forEach(r => { if(r[0]) locMap[r[0]] = r[1]; });
+  
+  const equipmentList = getEquipmentListCached();
+  const eqMap = {};
+  equipmentList.forEach(row => {
+    eqMap[`${row['拠点コード']}_${row['設備ID']}`] = row['設備名'] || row['設備ID'];
+  });
+  
+  // 完了ステータスを定義
+  const completedStatuses = [
+    config.PROJECT_STATUS.COMPLETED,  // 完了
+    config.PROJECT_STATUS.CANCELLED    // 中止
+  ];
+  
+  const allProjects = formatProjectData(data, locMap, eqMap);
+  
+  return allProjects.filter(p => completedStatuses.includes(p.status));
+}
+
+/**
+ * すべての案件を進行中・完了に分けて取得
+ */
+function getAllActiveProjects() {
+  return {
+    active: getActiveProjects(),
+    completed: getCompletedProjects()
+  };
 }
 
 /**

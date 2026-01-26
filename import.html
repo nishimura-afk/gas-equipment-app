@@ -1,3 +1,16 @@
+<style>
+select option[disabled] {
+  color: #666;
+  font-weight: normal;
+}
+
+select option[disabled][style*="font-weight:bold"] {
+  color: #000;
+  font-weight: bold;
+  background-color: #f0f0f0;
+}
+</style>
+
 <div class="space-y-6">
   <div class="flex justify-between items-center border-b pb-4">
     <div>
@@ -85,13 +98,14 @@ let currentFiles = [];
 let allProjects = []; 
 
 function importInit() {
-  // 既存案件を取得
+  // 既存案件を取得（進行中・完了に分けて）
   google.script.run.withSuccessHandler(projects => {
     // 新規案件候補を取得
     google.script.run.withSuccessHandler(list => {
       // 既存案件と新規案件を保存（階層化用）
       allProjects = {
-        existing: projects,
+        active: projects.active || [],
+        completed: projects.completed || [],
         new: list
       };
       
@@ -101,41 +115,76 @@ function importInit() {
 }
 
 /**
- * プルダウンHTMLを生成（拠点ごとに階層化）
+ * 案件を拠点ごとにグループ化
+ */
+function groupByLocation(projects) {
+  const projectsByLocation = {};
+  
+  projects.forEach(project => {
+    const locationName = project.locName || '不明';
+    if (!projectsByLocation[locationName]) {
+      projectsByLocation[locationName] = [];
+    }
+    projectsByLocation[locationName].push(project);
+  });
+  
+  return projectsByLocation;
+}
+
+/**
+ * プルダウンHTMLを生成（拠点ごとに階層化、進行中・完了を分けて表示）
  * 注: optgroupのネストは一部ブラウザでサポートされていないため、
  * インデント（全角スペース）で階層を表現するフォールバック版を使用
  */
 function buildProjectDropdown(fileName) {
   let html = '<option value="">-- 選択してください --</option>';
   
-  // 既存案件を拠点ごとにグループ化
-  const projectsByLocation = {};
-  
-  if (allProjects.existing && allProjects.existing.length > 0) {
-    allProjects.existing.forEach(project => {
-      const locationName = project.locName || '不明';
-      if (!projectsByLocation[locationName]) {
-        projectsByLocation[locationName] = [];
-      }
-      projectsByLocation[locationName].push(project);
-    });
+  // 進行中の案件
+  if (allProjects.active && allProjects.active.length > 0) {
+    html += '<option disabled style="font-weight:bold;">📍 進行中の案件</option>';
     
-    // 拠点名でソート
-    const sortedLocations = Object.keys(projectsByLocation).sort();
+    const activeByLocation = groupByLocation(allProjects.active);
+    const sortedActiveLocations = Object.keys(activeByLocation).sort();
     
-    if (sortedLocations.length > 0) {
-      // フォールバック版: optgroupのネストではなく、インデントで階層を表現
-      html += '<option disabled>📍 既存案件</option>';
+    sortedActiveLocations.forEach(locationName => {
+      html += `<option disabled>　${locationName}</option>`;
       
-      sortedLocations.forEach(locationName => {
-        html += `<option disabled>　${locationName}</option>`;
-        
-        projectsByLocation[locationName].forEach(project => {
-          const label = `　　${project.equipmentName || project.equipmentId || ''} (${project.workType || ''})`;
-          html += `<option value="EXISTING:${project.id}">${label}</option>`;
-        });
+      activeByLocation[locationName].forEach(project => {
+        const label = `　　${project.workType || project.equipmentName || ''}`;
+        html += `<option value="EXISTING:${project.id}">${label}</option>`;
       });
-    }
+    });
+  }
+  
+  // 区切り線
+  html += '<option disabled>─────────────────</option>';
+  
+  // 完了案件
+  if (allProjects.completed && allProjects.completed.length > 0) {
+    html += '<option disabled style="font-weight:bold;">📁 完了案件</option>';
+    
+    const completedByLocation = groupByLocation(allProjects.completed);
+    const sortedCompletedLocations = Object.keys(completedByLocation).sort();
+    
+    sortedCompletedLocations.forEach(locationName => {
+      html += `<option disabled>　${locationName}</option>`;
+      
+      completedByLocation[locationName].forEach(project => {
+        // 完了年月を表示（予定日から取得、なければステータス）
+        let dateLabel = '';
+        if (project.scheduledDate && project.scheduledDate.length >= 7) {
+          const dateStr = project.scheduledDate.substring(0, 7).replace('-', '/');
+          dateLabel = `（完了：${dateStr}）`;
+        } else if (project.status) {
+          dateLabel = `（${project.status}）`;
+        } else {
+          dateLabel = '（完了）';
+        }
+        
+        const label = `　　${project.workType || project.equipmentName || ''}${dateLabel}`;
+        html += `<option value="EXISTING:${project.id}">${label}</option>`;
+      });
+    });
   }
   
   // 区切り線
