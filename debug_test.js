@@ -169,3 +169,96 @@ function debugPARTS_PUMP_4Y() {
     Logger.log('❌ マッチング失敗');
   }
 }
+
+/**
+ * フォルダIDとファイル検出のデバッグ
+ */
+function debugFolderAccess() {
+  Logger.log('=== フォルダアクセステスト ===');
+  
+  const folderId = '1gUD2Z2N2-APYFXQcugu1fdex_YfoiyA2';
+  Logger.log('テスト対象フォルダID: ' + folderId);
+  
+  try {
+    const folder = DriveApp.getFolderById(folderId);
+    Logger.log('✅ フォルダにアクセス成功');
+    Logger.log('フォルダ名: ' + folder.getName());
+    
+    // すべてのファイルを取得
+    const allFiles = folder.getFiles();
+    let fileCount = 0;
+    
+    Logger.log('\n【全ファイル一覧】');
+    while (allFiles.hasNext()) {
+      fileCount++;
+      const file = allFiles.next();
+      Logger.log(fileCount + '. ' + file.getName());
+      Logger.log('   MimeType: ' + file.getMimeType());
+      Logger.log('   ID: ' + file.getId());
+    }
+    
+    if (fileCount === 0) {
+      Logger.log('⚠️ フォルダは空です');
+    } else {
+      Logger.log('\n合計ファイル数: ' + fileCount);
+    }
+    
+    // PDFのみ取得
+    Logger.log('\n【PDFファイルのみ】');
+    const pdfFiles = folder.getFilesByType(MimeType.PDF);
+    let pdfCount = 0;
+    
+    while (pdfFiles.hasNext()) {
+      pdfCount++;
+      const pdf = pdfFiles.next();
+      Logger.log(pdfCount + '. ' + pdf.getName());
+    }
+    
+    Logger.log('\nPDFファイル数: ' + pdfCount);
+    
+  } catch (error) {
+    Logger.log('❌ エラー: ' + error.message);
+    Logger.log('スタックトレース: ' + error.stack);
+  }
+  
+  Logger.log('\n=== テスト完了 ===');
+}
+
+/**
+ * 抽出データの構造確認
+ */
+function debugExtractedData() {
+  Logger.log('=== 抽出データ構造の確認 ===');
+  
+  // PDFファイル取得
+  const folderInfo = ensureInboxFolder();
+  const folder = DriveApp.getFolderById(folderInfo.id);
+  const pdfFiles = folder.getFilesByType(MimeType.PDF);
+  
+  if (!pdfFiles.hasNext()) {
+    Logger.log('❌ PDFファイルがありません');
+    return;
+  }
+  
+  const testFile = pdfFiles.next();
+  Logger.log('テストファイル: ' + testFile.getName());
+  
+  // PDF抽出
+  const extractedData = extractEstimateFromPDF(testFile.getId(), testFile.getName());
+  
+  // データの中身を全て表示
+  Logger.log('\n【抽出データの内容】');
+  Logger.log(JSON.stringify(extractedData, null, 2));
+  
+  // 各プロパティを個別に確認
+  Logger.log('\n【プロパティ確認】');
+  Logger.log('typeof extractedData: ' + typeof extractedData);
+  
+  if (extractedData) {
+    Logger.log('プロパティ一覧: ' + Object.keys(extractedData).join(', '));
+    
+    for (let key in extractedData) {
+      Logger.log(key + ' = ' + extractedData[key]);
+    }
+  }
+}

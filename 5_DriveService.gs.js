@@ -2,17 +2,24 @@
  * 5_DriveService.gs v5.7
  * ID生成にUUIDを採用
  */
-const USER_DRIVE_ID = '1wWBNUfHcoK9AIffNLOzc5Xbl_CBYtWH-';
+const USER_DRIVE_ID = '1gUD2Z2N2-APYFXQcugu1fdex_YfoiyA2';
 const INBOX_FOLDER_NAME = 'SS見積_受信BOX'; 
 const ARCHIVE_FOLDER_NAME = 'SS見積_処理済';
 
 function ensureInboxFolder() {
-  let rootFolder;
-  try { rootFolder = DriveApp.getFolderById(USER_DRIVE_ID); } catch (e) { rootFolder = DriveApp.getRootFolder(); }
-  const inboxFolders = rootFolder.getFoldersByName(INBOX_FOLDER_NAME);
-  const inboxFolder = inboxFolders.hasNext() ? inboxFolders.next() : rootFolder.createFolder(INBOX_FOLDER_NAME);
-  const archiveFolders = rootFolder.getFoldersByName(ARCHIVE_FOLDER_NAME);
-  if (!archiveFolders.hasNext()) rootFolder.createFolder(ARCHIVE_FOLDER_NAME);
+  // USER_DRIVE_IDが既に受信BOXフォルダ自体を指している
+  const inboxFolder = DriveApp.getFolderById(USER_DRIVE_ID);
+  
+  // 処理済フォルダは親フォルダ内に作成（02_見積り内）
+  const parentFolders = inboxFolder.getParents();
+  if (parentFolders.hasNext()) {
+    const parentFolder = parentFolders.next();
+    const archiveFolders = parentFolder.getFoldersByName(ARCHIVE_FOLDER_NAME);
+    if (!archiveFolders.hasNext()) {
+      parentFolder.createFolder(ARCHIVE_FOLDER_NAME);
+    }
+  }
+  
   return { id: inboxFolder.getId(), url: inboxFolder.getUrl(), name: inboxFolder.getName() };
 }
 

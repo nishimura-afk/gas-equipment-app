@@ -302,3 +302,205 @@ function listAvailableModels() {
     Logger.log('エラー: ' + JSON.stringify(result));
   }
 }
+
+/**
+ * Gemini APIキーを設定する（初回のみ実行）
+ */
+function setGeminiApiKey() {
+  const apiKey = 'AIzaSyB7vHNMb7N1oK91oHafav-Cbxbfe8mXITw'; // ここに取得したAPIキーを貼り付け
+  PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', apiKey);
+  Logger.log('✅ APIキーを設定しました');
+}
+
+/**
+ * APIキーが正しく設定されているか確認
+ */
+function checkGeminiApiKey() {
+  const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  
+  if (apiKey) {
+    Logger.log('✅ APIキーは設定されています');
+    Logger.log('キーの先頭: ' + apiKey.substring(0, 20) + '...');
+  } else {
+    Logger.log('❌ APIキーが設定されていません');
+  }
+}
+/**
+ * 見積PDF抽出のテスト
+ */
+function testEstimateSystem() {
+  Logger.log('=== 見積システムのテスト開始 ===');
+  
+  // 1. 受信BOXのスキャン
+  Logger.log('\n【ステップ1】受信BOXをスキャン中...');
+  const inboxResult = scanInboxFiles();
+  Logger.log('検出ファイル数: ' + inboxResult.files.length);
+  
+  if (inboxResult.files.length === 0) {
+    Logger.log('❌ PDFファイルが見つかりません');
+    return;
+  }
+  
+  // 2. 最初のファイルで抽出テスト
+  const testFile = inboxResult.files[0];
+  Logger.log('\n【ステップ2】PDF抽出テスト');
+  Logger.log('テストファイル: ' + testFile.name);
+  Logger.log('ファイルID: ' + testFile.id);
+  
+  const extracted = extractEstimateFromPDF(testFile.id);
+  
+  if (extracted.success) {
+    Logger.log('\n✅ 抽出成功！');
+    Logger.log('業者名: ' + extracted.data.vendor);
+    Logger.log('見積日: ' + extracted.data.estimateDate);
+    Logger.log('総額(税込): ' + extracted.data.totalAmount + '円');
+    Logger.log('明細件数: ' + extracted.data.details.length + '件');
+    
+    // 明細の最初の3件を表示
+    Logger.log('\n【明細サンプル】');
+    extracted.data.details.slice(0, 3).forEach((item, idx) => {
+      Logger.log(`${idx + 1}. ${item.itemName} - ${item.subtotal}円`);
+    });
+  } else {
+    Logger.log('\n❌ 抽出失敗');
+    Logger.log('エラー: ' + extracted.message);
+  }
+  
+  Logger.log('\n=== テスト完了 ===');
+}
+
+/**
+ * スプレッドシート保存テスト（修正版）
+ */
+function testSaveEstimate() {
+  Logger.log('=== スプレッドシート保存テスト ===');
+  
+  // 1. PDFファイル取得
+  const folderInfo = ensureInboxFolder();
+  const folder = DriveApp.getFolderById(folderInfo.id);
+  const pdfFiles = folder.getFilesByType(MimeType.PDF);
+  
+  if (!pdfFiles.hasNext()) {
+    Logger.log('❌ PDFファイルがありません');
+    return;
+  }
+  
+  const testFile = pdfFiles.next();
+  Logger.log('テストファイル: ' + testFile.getName());
+  
+  // 2. PDF抽出
+  const result = extractEstimateFromPDF(testFile.getId(), testFile.getName());
+  
+  if (!result || !result.success) {
+    Logger.log('❌ 抽出失敗');
+    return;
+  }
+  
+  const extractedData = result.data; // ← ここで data を取り出す
+  
+  Logger.log('✅ 抽出成功');
+  Logger.log('業者名: ' + extractedData.vendor);
+  Logger.log('総額: ' + extractedData.totalAmount + '円');
+  Logger.log('明細件数: ' + extractedData.details.length + '件');
+  
+  // 3. スプレッドシート保存
+  try {
+    const fileInfo = {
+      id: testFile.getId(),
+      name: testFile.getName(),
+      url: testFile.getUrl()
+    };
+    
+    const estimateId = saveEstimateToSheet(result, fileInfo); // result全体を渡す
+    Logger.log('\n✅ 保存成功！');
+    Logger.log('見積ID: ' + estimateId);
+    
+    // 4. 保存内容確認
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const compareSheet = ss.getSheetByName('見積比較');
+    const lastRow = compareSheet.getLastRow();
+    const savedData = compareSheet.getRange(lastRow, 1, 1, 14).getValues()[0];
+    
+    Logger.log('\n【保存された内容】');
+    Logger.log('見積ID: ' + savedData[0]);
+    Logger.log('拠点名: ' + savedData[3]);
+    Logger.log('設備名: ' + savedData[5]);
+    Logger.log('業者名: ' + savedData[6]);
+    Logger.log('総額(税込): ' + savedData[10]);
+    
+  } catch (error) {
+    Logger.log('❌ 保存エラー: ' + error.message);
+    Logger.log(error.stack);
+  }
+}
+
+/**
+ * 抽出した見積データをスプレッドシートに保存
+ * @param {Object} result - extractEstimateFromPDF()の戻り値 {success, data}
+ * @param {Object} fileInfo - {id, name, url}
+ * @return {string} 見積ID
+ */
+function saveEstimateToSheet(result, fileInfo) {
+  if (!result || !result.success) {
+    throw new Error('抽出データが不正です');
+  }
+  
+  const data = result.data;
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 見積IDを生成（E + タイムスタンプ）
+  const estimateId = 'E' + new Date().getTime();
+  
+  // ファイル名から案件情報を推測
+  const activeProjects = getActiveProjects();
+  const allEquipments = getEquipmentListCached();
+  const suggestion = suggestProjectFromFileName(fileInfo.name, activeProjects, allEquipments);
+  
+  // suggestionの値を取得（nullの場合は空の値を使用）
+  const projectId = suggestion ? suggestion.id || '' : '';
+  const locationCode = suggestion ? suggestion.locCode || '' : '';
+  const locationName = suggestion ? suggestion.locName || '' : '';
+  const equipmentId = suggestion ? suggestion.eqId || '' : '';
+  const equipmentName = suggestion ? suggestion.eqName || '' : '';
+  
+  // 見積比較シートに保存
+  const compareSheet = ss.getSheetByName('見積比較');
+  const compareRow = [
+    estimateId,                           // 見積ID
+    projectId,                            // 案件ID
+    locationCode,                         // 拠点コード
+    locationName,                         // 拠点名
+    equipmentId,                          // 設備ID
+    equipmentName,                        // 設備名
+    data.vendor || '',                    // 業者名
+    data.estimateDate || '',              // 見積日
+    data.amountExcludingTax || 0,         // 総額(税抜)
+    data.consumptionTax || 0,             // 消費税
+    data.totalAmount || 0,                // 総額(税込)
+    data.expenses || 0,                   // 諸経費
+    fileInfo.name,                        // PDFファイル名
+    fileInfo.url,                         // PDFリンク
+    new Date()                            // 登録日
+  ];
+  compareSheet.appendRow(compareRow);
+  
+  // 見積明細シートに保存
+  const detailSheet = ss.getSheetByName('見積明細');
+  if (data.details && data.details.length > 0) {
+    const detailRows = data.details.map((item, index) => [
+      estimateId,                         // 見積ID
+      index + 1,                          // 行番号
+      item.itemName || '',                // 項目名
+      item.unitPrice || 0,                // 単価
+      item.quantity || 0,                 // 数量
+      item.unit || '',                    // 単位
+      item.subtotal || 0,                 // 小計
+      item.note || ''                     // 備考
+    ]);
+    
+    detailRows.forEach(row => detailSheet.appendRow(row));
+  }
+  
+  Logger.log('✅ スプレッドシートに保存完了: ' + estimateId);
+  return estimateId;
+}
