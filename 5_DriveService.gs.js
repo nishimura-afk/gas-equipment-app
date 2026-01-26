@@ -121,6 +121,35 @@ function executeImport(filesToImport) {
       let projectInfo = null;
       if (item.projectType === 'NONE') {
         projectInfo = { type: 'NONE', id: null, locCode: null, eqId: null, locName: null, eqName: null };
+      } else if (item.projectType === 'NEW_PROJECT') {
+        // 新規案件として登録する場合
+        // ファイル名から推測して案件を作成
+        const activeProjects = getAllActiveProjects();
+        const allEquipments = getEquipmentListCached();
+        const suggestion = suggestProjectFromFileName(item.fileName || file.getName(), activeProjects, allEquipments);
+        
+        if (!suggestion || suggestion.type !== 'NEW') {
+          throw new Error('ファイル名から案件情報を推測できませんでした');
+        }
+        
+        // 新規案件を作成
+        const newProjectId = createNewProject({
+          locationCode: suggestion.locCode,
+          locationName: suggestion.locName,
+          equipmentId: suggestion.eqId,
+          equipmentName: suggestion.eqName,
+          workType: '見積受領',
+          status: config.PROJECT_STATUS.ESTIMATE_RCV
+        });
+        
+        projectInfo = {
+          type: 'EXISTING',
+          id: newProjectId,
+          locCode: suggestion.locCode,
+          locName: suggestion.locName,
+          eqId: suggestion.eqId,
+          eqName: suggestion.eqName
+        };
       } else if (item.projectType === 'NEW') {
         // 新規案件を作成
         const uniqueId = Utilities.getUuid();
@@ -343,6 +372,15 @@ function uploadAndImport(data, fileName, mimeType, projectInfo) {
   const folder = DriveApp.getFolderById(folderInfo.id);
   const blob = Utilities.newBlob(Utilities.base64Decode(data), mimeType, fileName);
   const file = folder.createFile(blob);
-  const importItem = { fileId: file.getId(), projectType: projectInfo.type, projectId: projectInfo.id, locCode: projectInfo.locCode, eqId: projectInfo.eqId };
+  
+  const importItem = { 
+    fileId: file.getId(), 
+    projectType: projectInfo.type, 
+    projectId: projectInfo.id, 
+    locCode: projectInfo.locCode, 
+    eqId: projectInfo.eqId,
+    fileName: projectInfo.fileName || fileName
+  };
+  
   return executeImport([importItem]);
 }

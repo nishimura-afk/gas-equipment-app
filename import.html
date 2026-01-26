@@ -87,31 +87,67 @@ let allProjects = [];
 function importInit() {
   // 既存案件を取得
   google.script.run.withSuccessHandler(projects => {
-    const existingProjects = projects.map(p => ({
-      val: `EXISTING:${p.id}`,
-      label: `【既存】${p.locName} - ${p.equipmentName} (${p.workType})`
-    }));
-    
     // 新規案件候補を取得
     google.script.run.withSuccessHandler(list => {
-      const newProjects = list.map(item => ({
-        val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
-        label: `【新規】${item['拠点名']} - ${item['設備名']}`
-      }));
-      
-      // 案件なしオプションを追加
-      allProjects = [
-        ...existingProjects,
-        ...newProjects,
-        {
-          val: 'NO_PROJECT',
-          label: '💡 案件なし'
-        }
-      ];
+      // 既存案件と新規案件を保存（階層化用）
+      allProjects = {
+        existing: projects,
+        new: list
+      };
       
       scanInbox();
     }).getEquipmentList();
   }).getAllActiveProjects();
+}
+
+/**
+ * プルダウンHTMLを生成（拠点ごとに階層化）
+ * 注: optgroupのネストは一部ブラウザでサポートされていないため、
+ * インデント（全角スペース）で階層を表現するフォールバック版を使用
+ */
+function buildProjectDropdown(fileName) {
+  let html = '<option value="">-- 選択してください --</option>';
+  
+  // 既存案件を拠点ごとにグループ化
+  const projectsByLocation = {};
+  
+  if (allProjects.existing && allProjects.existing.length > 0) {
+    allProjects.existing.forEach(project => {
+      const locationName = project.locName || '不明';
+      if (!projectsByLocation[locationName]) {
+        projectsByLocation[locationName] = [];
+      }
+      projectsByLocation[locationName].push(project);
+    });
+    
+    // 拠点名でソート
+    const sortedLocations = Object.keys(projectsByLocation).sort();
+    
+    if (sortedLocations.length > 0) {
+      // フォールバック版: optgroupのネストではなく、インデントで階層を表現
+      html += '<option disabled>📍 既存案件</option>';
+      
+      sortedLocations.forEach(locationName => {
+        html += `<option disabled>　${locationName}</option>`;
+        
+        projectsByLocation[locationName].forEach(project => {
+          const label = `　　${project.equipmentName || project.equipmentId || ''} (${project.workType || ''})`;
+          html += `<option value="EXISTING:${project.id}">${label}</option>`;
+        });
+      });
+    }
+  }
+  
+  // 区切り線
+  html += '<option disabled>─────────────────</option>';
+  
+  // 新規案件として登録
+  html += '<option value="NEW_PROJECT">✨ 新規案件として登録</option>';
+  
+  // 案件なし
+  html += '<option value="NO_PROJECT">💡 案件なし</option>';
+  
+  return html;
 }
 
 function switchTab(tab) {
@@ -160,8 +196,8 @@ function renderFiles(res) {
     div.className = "bg-white p-3 rounded border flex items-center justify-between hover:bg-gray-50";
     
     let selectHtml = `<select class="border rounded p-1 text-sm max-w-xs import-select" data-idx="${idx}">`;
-    selectHtml += `<option value="">-- 選択してください --</option>`;
     
+    // 推奨案件がある場合は最初に表示
     if (file.suggestion) {
       const val = (file.suggestion.type === 'NEW') 
         ? `NEW:${file.suggestion.locCode}:${file.suggestion.eqId}`
@@ -170,9 +206,8 @@ function renderFiles(res) {
       selectHtml += `<option disabled>──────────</option>`;
     }
     
-    allProjects.forEach(p => { 
-      selectHtml += `<option value="${p.val}">${p.label}</option>`; 
-    });
+    // 階層化されたプルダウンを生成
+    selectHtml += buildProjectDropdown(file.name);
     selectHtml += `</select>`;
 
     div.innerHTML = `
@@ -224,6 +259,17 @@ function execBulkImport() {
           locCode: null,
           eqId: null
         });
+      } else if (val === 'NEW_PROJECT') {
+        // 新規案件として登録する場合
+        // ファイル名から推測して案件を作成
+        targets.push({
+          fileId: file.id,
+          projectType: 'NEW_PROJECT',
+          projectId: null,
+          locCode: null,
+          eqId: null,
+          fileName: file.name
+        });
       } else {
         const parts = val.split(':');
         targets.push({
@@ -261,21 +307,7 @@ function handleFileSelect(input) {
   document.getElementById('upload-size').innerText = (file.size/1024).toFixed(1) + ' KB';
   
   const sel = document.getElementById('upload-project-select');
-  sel.innerHTML = '<option value="">選択してください</option>';
-  allProjects.forEach(p => {
-    const op = document.createElement('option');
-    op.value = p.val;
-    op.innerText = p.label;
-    sel.appendChild(op);
-  });
-  
-  // 案件なしオプションを追加（まだ追加されていない場合）
-  if (!Array.from(sel.options).some(opt => opt.value === 'NO_PROJECT')) {
-    const noneOp = document.createElement('option');
-    noneOp.value = 'NO_PROJECT';
-    noneOp.innerText = '💡 案件なし';
-    sel.appendChild(noneOp);
-  }
+  sel.innerHTML = buildProjectDropdown(uploadFile.name);
 }
 
 function execUpload() {
@@ -290,6 +322,15 @@ function execUpload() {
       id: null,
       locCode: null,
       eqId: null
+    };
+  } else if (sel.value === 'NEW_PROJECT') {
+    // 新規案件として登録する場合
+    projectInfo = {
+      type: 'NEW_PROJECT',
+      id: null,
+      locCode: null,
+      eqId: null,
+      fileName: uploadFile.name
     };
   } else {
     const parts = sel.value.split(':');

@@ -128,6 +128,36 @@ function getAllActiveProjects() {
   );
 }
 
+/**
+ * 新規案件を案件管理シートに作成
+ * @param {Object} projectData - 案件情報 {locationCode, locationName, equipmentId, equipmentName, workType, status}
+ * @return {string} 新規案件ID
+ */
+function createNewProject(projectData) {
+  const config = getConfig();
+  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  
+  // 新規案件IDを生成
+  const newProjectId = Utilities.getUuid();
+  
+  // 案件管理シートに追加
+  const newRow = [
+    newProjectId,                        // ID
+    projectData.locationCode || '',      // 拠点コード
+    projectData.equipmentId || '',       // 設備ID
+    projectData.workType || '見積受領',  // 作業内容
+    '',                                  // 予定日（空欄）
+    projectData.status || config.PROJECT_STATUS.ESTIMATE_RCV, // ステータス
+    '',                                  // カレンダーID（空欄）
+    ''                                   // 発注先（空欄）
+  ];
+  
+  scheduleSheet.appendRow(newRow);
+  
+  Logger.log('新規案件を作成: ' + newProjectId);
+  return newProjectId;
+}
+
 function getExchangeTargetsForUI() {
   return getDashboardData().noticeList.map(m => ({
     locCode: m['拠点コード'], locName: m['拠点名'], equipmentId: m['設備ID'], equipmentName: m['設備名'] || m['設備ID'],
