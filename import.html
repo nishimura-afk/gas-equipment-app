@@ -133,40 +133,263 @@ function renderFiles(res) {
     return;
   }
 
-  currentFiles = res.files; 
+  currentFiles = res.files;
 
+  // ========================================
+  // 【重要】案件化済み/未案件化に分類
+  // ========================================
+  
+  // Step 1: 案件化済み/未案件化に分類
+  const existingProjects = []; // 既存案件
+  const newEquipments = {};     // 新規（設備種別でグループ化）
+  
   res.files.forEach((file, idx) => {
-    const div = document.createElement('div');
-    div.className = "bg-white p-3 rounded border flex items-center justify-between hover:bg-gray-50";
-    
-    let selectHtml = `<select class="border rounded p-1 text-sm max-w-xs import-select" data-idx="${idx}">`;
-    selectHtml += `<option value="">-- 選択してください --</option>`;
-    
     if (file.suggestion) {
-      const val = (file.suggestion.type === 'NEW') 
-        ? `NEW:${file.suggestion.locCode}:${file.suggestion.eqId}`
-        : `EXISTING:${file.suggestion.id}`;
-      selectHtml += `<option value="${val}" selected>💡 ${file.suggestion.label}</option>`;
-      selectHtml += `<option disabled>──────────</option>`;
+      if (file.suggestion.type === 'EXISTING') {
+        // 既存案件
+        existingProjects.push({
+          file: file,
+          idx: idx,
+          projectId: file.suggestion.id,
+          label: file.suggestion.label
+        });
+      } else if (file.suggestion.type === 'NEW') {
+        // 新規案件 - 設備名でグループ化
+        const equipmentName = getBaseEquipmentName(file.suggestion.eqName);
+        
+        if (!newEquipments[equipmentName]) {
+          newEquipments[equipmentName] = [];
+        }
+        
+        newEquipments[equipmentName].push({
+          file: file,
+          idx: idx,
+          locCode: file.suggestion.locCode,
+          locName: file.suggestion.locName,
+          eqId: file.suggestion.eqId,
+          eqName: file.suggestion.eqName
+        });
+      }
     }
-    
-    allProjects.forEach(p => { selectHtml += `<option value="${p.val}">${p.label}</option>`; });
-    selectHtml += `</select>`;
+  });
 
-    div.innerHTML = `
-      <div class="flex items-center gap-3 overflow-hidden">
-        <input type="checkbox" class="import-check w-5 h-5 accent-blue-600" data-idx="${idx}" ${file.suggestion ? 'checked' : ''} onchange="updateBulkCount()">
-        <div class="min-w-0">
-          <div class="font-bold truncate text-sm"><a href="${file.url}" target="_blank" class="text-blue-600 hover:underline"><i class="fas fa-file-pdf mr-1"></i>${file.name}</a></div>
-          <div class="text-xs text-gray-400">${file.lastUpdated}</div>
-        </div>
+  // Step 2: 案件化済みセクションを描画
+  if (existingProjects.length > 0) {
+    const section = createSectionHeader('案件化済み', existingProjects.length, 'blue');
+    container.appendChild(section);
+    
+    existingProjects.forEach(item => {
+      const div = createExistingProjectItem(item);
+      container.appendChild(div);
+    });
+  }
+
+  // Step 3: 新規案件セクションを描画
+  if (Object.keys(newEquipments).length > 0) {
+    const totalNew = Object.values(newEquipments).reduce((sum, items) => sum + items.length, 0);
+    const section = createSectionHeader('新規案件', totalNew, 'green');
+    container.appendChild(section);
+    
+    // 設備種別ごとにグループ表示
+    Object.keys(newEquipments).sort().forEach(equipmentName => {
+      const items = newEquipments[equipmentName];
+      const div = createNewEquipmentGroup(equipmentName, items);
+      container.appendChild(div);
+    });
+  }
+
+  updateBulkCount();
+}
+
+/**
+ * 設備名から基本名を抽出（括弧を除去）
+ */
+function getBaseEquipmentName(equipmentName) {
+  if (!equipmentName) return '不明な設備';
+  // 括弧とその中身を削除
+  return equipmentName.replace(/[(\(（].*?[)\)）]/g, '').trim();
+}
+
+/**
+ * セクションヘッダーを作成
+ */
+/**
+ * セクションヘッダーを作成
+ */
+function createSectionHeader(title, count, color) {
+  const section = document.createElement('div');
+  // Tailwindの動的クラス名を避けて、固定クラス名を使用
+  let className, badgeClassName;
+  if (color === 'blue') {
+    className = 'bg-blue-50 border-blue-200 border-b-2 p-3 font-bold text-blue-800 flex items-center gap-2';
+    badgeClassName = 'text-xs bg-blue-100 px-2 py-1 rounded';
+  } else if (color === 'green') {
+    className = 'bg-green-50 border-green-200 border-b-2 p-3 font-bold text-green-800 flex items-center gap-2';
+    badgeClassName = 'text-xs bg-green-100 px-2 py-1 rounded';
+  } else {
+    className = 'bg-gray-50 border-gray-200 border-b-2 p-3 font-bold text-gray-800 flex items-center gap-2';
+    badgeClassName = 'text-xs bg-gray-100 px-2 py-1 rounded';
+  }
+  
+  section.className = className;
+  section.innerHTML = `
+    <i class="fas fa-folder-open"></i>
+    <span>${title}</span>
+    <span class="${badgeClassName}">${count}件</span>
+  `;
+  return section;
+}
+
+/**
+ * 既存案件アイテムを作成
+ */
+function createExistingProjectItem(item) {
+  const div = document.createElement('div');
+  div.className = "bg-white p-3 border-b flex items-center gap-3 hover:bg-blue-50";
+  
+  div.innerHTML = `
+    <input type="checkbox" 
+           class="import-check w-5 h-5 accent-blue-600" 
+           data-idx="${item.idx}" 
+           checked
+           onchange="updateBulkCount()">
+    <div class="flex-1 min-w-0">
+      <div class="font-bold text-sm text-blue-600 truncate">
+        <i class="fas fa-link mr-1"></i>${item.label}
       </div>
-      <div>${selectHtml}</div>
+      <div class="text-xs text-gray-500 mt-1">
+        <a href="${item.file.url}" target="_blank" class="hover:underline">
+          <i class="fas fa-file-pdf mr-1"></i>${item.file.name}
+        </a>
+      </div>
+    </div>
+    <select class="border rounded p-1 text-sm import-select" data-idx="${item.idx}">
+      <option value="EXISTING:${item.projectId}" selected>この案件に紐付け</option>
+    </select>
+  `;
+  
+  return div;
+}
+
+/**
+ * 新規設備グループを作成
+ */
+function createNewEquipmentGroup(equipmentName, items) {
+  const groupDiv = document.createElement('div');
+  groupDiv.className = "border-b";
+  
+  // グループヘッダー
+  const header = document.createElement('div');
+  header.className = "bg-green-50 p-3 flex items-center gap-3 cursor-pointer hover:bg-green-100";
+  header.onclick = () => toggleGroup(equipmentName);
+  
+  const storeList = items.map(i => i.locName).join('、');
+  const storeCount = items.length;
+  
+  header.innerHTML = `
+    <input type="checkbox" 
+           class="group-checkbox w-5 h-5 accent-green-600" 
+           data-equipment="${equipmentName}"
+           onchange="toggleGroupCheckboxes('${equipmentName}')"
+           onclick="event.stopPropagation()"
+           checked>
+    <div class="flex-1">
+      <div class="font-bold text-sm text-green-800">
+        <i class="fas fa-wrench mr-1"></i>新規: ${equipmentName}更新
+      </div>
+      <div class="text-xs text-green-600 mt-1">
+        該当: ${storeCount}店舗（${storeList}）
+      </div>
+    </div>
+    <i class="fas fa-chevron-up text-gray-400" id="chevron-${equipmentName}"></i>
+  `;
+  
+  // グループボディ（折りたたみ可能、初期状態は展開）
+  const body = document.createElement('div');
+  body.id = `group-body-${equipmentName}`;
+  body.className = "bg-gray-50";
+  
+  items.forEach(item => {
+    const itemDiv = document.createElement('div');
+    itemDiv.className = "p-3 pl-12 border-t flex items-center gap-3 hover:bg-white";
+    
+    itemDiv.innerHTML = `
+      <input type="checkbox" 
+             class="import-check equipment-check w-4 h-4 accent-green-600" 
+             data-idx="${item.idx}"
+             data-equipment="${equipmentName}"
+             checked
+             onchange="updateBulkCount(); updateGroupCheckbox('${equipmentName}')">
+      <div class="flex-1 text-sm">
+        <span class="font-bold">${item.locName}</span>
+        <a href="${item.file.url}" target="_blank" class="text-xs text-gray-500 ml-2 hover:underline">
+          <i class="fas fa-file-pdf mr-1"></i>${item.file.name}
+        </a>
+      </div>
+      <select class="border rounded p-1 text-xs import-select" data-idx="${item.idx}">
+        <option value="NEW:${item.locCode}:${item.eqId}" selected>新規案件作成</option>
+      </select>
     `;
-    container.appendChild(div);
+    
+    body.appendChild(itemDiv);
+  });
+  
+  groupDiv.appendChild(header);
+  groupDiv.appendChild(body);
+  
+  return groupDiv;
+}
+
+/**
+ * グループの展開/折りたたみ
+ */
+function toggleGroup(equipmentName) {
+  const body = document.getElementById(`group-body-${equipmentName}`);
+  const chevron = document.getElementById(`chevron-${equipmentName}`);
+  
+  if (body.classList.contains('hidden')) {
+    body.classList.remove('hidden');
+    chevron.classList.remove('fa-chevron-down');
+    chevron.classList.add('fa-chevron-up');
+  } else {
+    body.classList.add('hidden');
+    chevron.classList.remove('fa-chevron-up');
+    chevron.classList.add('fa-chevron-down');
+  }
+}
+
+/**
+ * グループ内の全チェックボックスを切り替え
+ */
+function toggleGroupCheckboxes(equipmentName) {
+  const groupCheckbox = document.querySelector(`.group-checkbox[data-equipment="${equipmentName}"]`);
+  const itemCheckboxes = document.querySelectorAll(`.equipment-check[data-equipment="${equipmentName}"]`);
+  
+  itemCheckboxes.forEach(cb => {
+    cb.checked = groupCheckbox.checked;
   });
   
   updateBulkCount();
+}
+
+/**
+ * 個別チェックに応じてグループチェックを更新
+ */
+function updateGroupCheckbox(equipmentName) {
+  const groupCheckbox = document.querySelector(`.group-checkbox[data-equipment="${equipmentName}"]`);
+  const itemCheckboxes = document.querySelectorAll(`.equipment-check[data-equipment="${equipmentName}"]`);
+  const checkedCount = Array.from(itemCheckboxes).filter(cb => cb.checked).length;
+  
+  if (checkedCount === 0) {
+    groupCheckbox.checked = false;
+    groupCheckbox.indeterminate = false;
+  } else if (checkedCount === itemCheckboxes.length) {
+    groupCheckbox.checked = true;
+    groupCheckbox.indeterminate = false;
+  } else {
+    groupCheckbox.checked = false;
+    groupCheckbox.indeterminate = true;
+  }
 }
 
 function updateBulkCount() {
