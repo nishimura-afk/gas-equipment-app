@@ -15,39 +15,46 @@ function generateEstimateId() {
 }
 
 /**
- * 見積リンクを記録（簡易版 - Gemini API不使用）
+ * 見積リンクを記録（見積管理マスタに保存）
  * @param {Object} fileInfo - {id, name, url}
  * @param {Object} projectInfo - {projectId, locCode, locName, eqId, eqName}
  * @return {string} 見積ID
  */
 function saveEstimateLink(fileInfo, projectInfo) {
   const config = getConfig();
-  const headerSheet = getSheet(config.SHEET_NAMES.ESTIMATE_HEADER);
+  const sheet = getSheet(config.SHEET_NAMES.ESTIMATE_MASTER);
   
   const estimateId = generateEstimateId();
   
-  // 最小限の情報のみ記録（業者名・金額は空欄 - 手動入力）
+  // 見積管理マスタの列順序に合わせて記録
   const newRow = [
     estimateId,                           // 見積ID
-    projectInfo.projectId || '',         // 案件ID
-    projectInfo.locCode || '',           // 拠点コード
-    projectInfo.locName || '',           // 拠点名
-    projectInfo.eqId || '',              // 設備ID
-    projectInfo.eqName || '',            // 設備名
-    '',                                   // 業者名（空欄 - 手動入力）
-    '',                                   // 見積日（空欄 - 手動入力）
-    '',                                   // 総額(税抜)（空欄 - 手動入力）
-    '',                                   // 消費税（空欄 - 手動入力）
-    '',                                   // 総額(税込)（空欄 - 手動入力）
-    '',                                   // 諸経費（空欄 - 手動入力）
+    new Date(),                           // 登録日
+    projectInfo.projectId || '',          // 案件ID
+    projectInfo.locCode || '',            // 拠点コード
+    projectInfo.locName || '',            // 拠点名
+    projectInfo.eqId || '',               // 設備ID
+    projectInfo.eqName || '',             // 設備名
+    '',                                   // 業者名（手動入力）
+    '',                                   // 見積日（手動入力）
+    '',                                   // 総額(税抜)（手動入力）
+    '',                                   // 消費税（手動入力）
+    '',                                   // 総額(税込)（手動入力）
+    '',                                   // メモ（手動入力）
     fileInfo.name,                        // PDFファイル名
-    fileInfo.url,                         // PDFリンク
-    new Date()                            // 登録日
+    fileInfo.url                          // PDFリンク
   ];
   
-  headerSheet.appendRow(newRow);
+  sheet.appendRow(newRow);
   
-  Logger.log(`✅ 見積リンク記録: ${estimateId} - ${projectInfo.locName || ''} ${projectInfo.eqName || ''}`);
+  // PDFリンク列にハイパーリンクを設定
+  const lastRow = sheet.getLastRow();
+  const linkCell = sheet.getRange(lastRow, 15); // PDFリンク列
+  if (fileInfo.url) {
+    linkCell.setFormula(`=HYPERLINK("${fileInfo.url}", "開く")`);
+  }
+  
+  Logger.log(`✅ 見積記録: ${estimateId} - ${projectInfo.locName || ''} ${projectInfo.eqName || ''}`);
   return estimateId;
 }
 
@@ -106,58 +113,90 @@ function saveEstimateDetails(estimateId, details) {
 }
 
 /**
- * 案件の見積一覧を取得
+ * 設備の過去見積を取得
  */
-function getEstimatesByProject(projectId) {
+function getEstimatesByEquipment(locCode, eqId) {
   const config = getConfig();
-  const headerSheet = getSheet(config.SHEET_NAMES.ESTIMATE_HEADER);
-  const detailSheet = getSheet(config.SHEET_NAMES.ESTIMATE_DETAIL);
+  const sheet = getSheet(config.SHEET_NAMES.ESTIMATE_MASTER);
+  const data = sheet.getDataRange().getValues();
   
-  const headerData = headerSheet.getDataRange().getValues();
-  const detailData = detailSheet.getDataRange().getValues();
-  
-  if (headerData.length <= 1) return [];
+  if (data.length <= 1) return [];
   
   const col = {};
-  headerData[0].forEach(function(h, i) { col[h] = i; });
+  data[0].forEach((h, i) => { col[h] = i; });
   
   const estimates = [];
   
-  for (var i = 1; i < headerData.length; i++) {
-    const row = headerData[i];
-    if (row[col['案件ID']] === projectId) {
-      const estimateId = row[col['見積ID']];
-      
-      const details = [];
-      for (var j = 1; j < detailData.length; j++) {
-        if (detailData[j][0] === estimateId) {
-          details.push({
-            rowNumber: detailData[j][1],
-            itemName: detailData[j][2],
-            unitPrice: detailData[j][3],
-            quantity: detailData[j][4],
-            unit: detailData[j][5],
-            subtotal: detailData[j][6],
-            note: detailData[j][7]
-          });
-        }
-      }
-      
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    
+    if (row[col['拠点コード']] === locCode && row[col['設備ID']] === eqId) {
       estimates.push({
-        estimateId: estimateId,
-        vendor: row[col['業者名']],
-        estimateDate: row[col['見積日']],
-        amountExcludingTax: row[col['総額(税抜)']],
-        consumptionTax: row[col['消費税']],
-        totalAmount: row[col['総額(税込)']],
-        expenses: row[col['諸経費']],
-        pdfFileName: row[col['PDFファイル名']],
-        pdfLink: row[col['PDFリンク']],
+        estimateId: row[col['見積ID']],
         registeredDate: row[col['登録日']],
-        details: details
+        projectId: row[col['案件ID']] || '',
+        vendor: row[col['業者名']] || '未入力',
+        estimateDate: row[col['見積日']] || '',
+        amountExcludingTax: row[col['総額(税抜)']] || '',
+        consumptionTax: row[col['消費税']] || '',
+        totalAmount: row[col['総額(税込)']] || '未入力',
+        memo: row[col['メモ']] || '',
+        pdfFileName: row[col['PDFファイル名']],
+        pdfLink: row[col['PDFリンク']]
       });
     }
   }
+  
+  // 登録日の降順でソート
+  estimates.sort((a, b) => {
+    const dateA = a.registeredDate instanceof Date ? a.registeredDate : new Date(a.registeredDate);
+    const dateB = b.registeredDate instanceof Date ? b.registeredDate : new Date(b.registeredDate);
+    return dateB - dateA;
+  });
+  
+  return estimates;
+}
+
+/**
+ * 案件の見積を取得
+ */
+function getEstimatesByProject(projectId) {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.ESTIMATE_MASTER);
+  const data = sheet.getDataRange().getValues();
+  
+  if (data.length <= 1) return [];
+  
+  const col = {};
+  data[0].forEach((h, i) => { col[h] = i; });
+  
+  const estimates = [];
+  
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    
+    if (row[col['案件ID']] === projectId) {
+      estimates.push({
+        estimateId: row[col['見積ID']],
+        registeredDate: row[col['登録日']],
+        vendor: row[col['業者名']] || '未入力',
+        estimateDate: row[col['見積日']] || '',
+        amountExcludingTax: row[col['総額(税抜)']] || '',
+        consumptionTax: row[col['消費税']] || '',
+        totalAmount: row[col['総額(税込)']] || '未入力',
+        memo: row[col['メモ']] || '',
+        pdfFileName: row[col['PDFファイル名']],
+        pdfLink: row[col['PDFリンク']]
+      });
+    }
+  }
+  
+  // 登録日の降順でソート
+  estimates.sort((a, b) => {
+    const dateA = a.registeredDate instanceof Date ? a.registeredDate : new Date(a.registeredDate);
+    const dateB = b.registeredDate instanceof Date ? b.registeredDate : new Date(b.registeredDate);
+    return dateB - dateA;
+  });
   
   return estimates;
 }

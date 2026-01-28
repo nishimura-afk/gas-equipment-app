@@ -19,8 +19,10 @@ const SHEET_NAMES = {
   STATUS_SUMMARY: 'ステータス集計',
   SYS_LOG: 'システムログ',
   CONFIG_MASTER: '設定マスタ',
-  ESTIMATE_HEADER: '見積比較',      // ★追加
-  ESTIMATE_DETAIL: '見積明細'       // ★追加
+    ESTIMATE_MASTER: '見積管理マスタ',        // 見積管理のマスタシート
+    ESTIMATE_COMPARISON: '案件別見積比較',    // オプション：案件別比較用
+    ESTIMATE_HEADER: '見積比較',              // 旧シート（互換性のため残す）
+    ESTIMATE_DETAIL: '見積明細'               // 旧シート（互換性のため残す）
 };
 
   // アラートを出す時期（年数基準に対する前倒し期間）
