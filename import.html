@@ -83,54 +83,38 @@
 <script>
 console.log('✅ import.html script loaded');
 
+// ========================================
+// グローバル変数定義（最優先）
+// ========================================
+window.allProjects = [];
+window.allEquipmentsForEmail = [];
+window.selectedFiles = [];
+
 let currentFiles = []; 
-let allProjects = []; 
 let uploadedFiles = []; // PCアップロード用のファイル配列
 
-/**
- * ページ初期化
- */
+// ========================================
+// 初期化関数
+// ========================================
 function importInit() {
   console.log('🚀 importInit called');
   
-  // 既存案件を取得（詳細情報を含む）
+  // 既存案件を取得
   google.script.run
     .withSuccessHandler(function(projects) {
-      console.log('✅ getAllActiveProjects success:', projects);
+      window.allProjects = projects || [];
+      console.log('✅ getAllActiveProjects success:', window.allProjects.length);
+      console.log('📊 Sample project:', window.allProjects[0]);
       
-      // 既存案件の詳細情報を保持
-      const existingProjects = projects.map(function(item) {
-        // 案件IDの短縮版を作成（表示用）
-        const shortId = item.id ? item.id.substring(0, 8) : '';
-        
-        return {
-          val: `EXISTING:${item.id}`,
-          label: `案件#${shortId}: ${item.locName} - ${item.equipmentName || item.equipmentId} - ${item.workType}`,
-          locCode: item.locCode,
-          id: item.id
-        };
-      });
-      
-      // 設備一覧も取得（新規案件用）
+      // 設備マスタを取得
       google.script.run
-        .withSuccessHandler(function(list) {
-          console.log('✅ getEquipmentList success:', list);
+        .withSuccessHandler(function(equipments) {
+          window.allEquipmentsForEmail = equipments || [];
+          console.log('✅ getEquipmentList success:', window.allEquipmentsForEmail.length);
+          console.log('📊 Sample equipment:', window.allEquipmentsForEmail[0]);
           
-          // 新規案件用のデータも保持
-          const newProjectOptions = list.map(function(item) {
-            return {
-              val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
-              label: `【新規】${item['拠点名']} - ${item['設備名']}`,
-              locCode: item['拠点コード']
-            };
-          });
-          
-          // allProjectsに統合
-          allProjects = [...existingProjects, ...newProjectOptions];
-          console.log('✅ allProjects initialized:', allProjects.length, 'items');
-          
-          // 受信BOXをスキャン
-          scanInbox();
+          // 両方のデータが揃ったら統合
+          mergeProjectsAndEquipments();
         })
         .withFailureHandler(function(error) {
           console.error('❌ getEquipmentList failed:', error);
@@ -143,6 +127,57 @@ function importInit() {
       alert('案件データの取得に失敗しました: ' + error);
     })
     .getAllActiveProjects();
+}
+
+// ========================================
+// データ統合関数
+// ========================================
+function mergeProjectsAndEquipments() {
+  console.log('🔄 Merging data...');
+  
+  const existingProjects = window.allProjects || [];
+  const equipments = window.allEquipmentsForEmail || [];
+  
+  // 新規案件オプションを生成
+  const newProjectOptions = equipments.map(function(eq) {
+    return {
+      val: `NEW:${eq['拠点コード']}:${eq['設備ID']}`,
+      label: `【新規】${eq['拠点名']} - ${eq['設備名']}`,
+      isNew: true,
+      locCode: eq['拠点コード'],
+      locName: eq['拠点名'],
+      eqId: eq['設備ID'],
+      eqName: eq['設備名']
+    };
+  });
+  
+  // 既存案件オプション
+  const existingOptions = existingProjects.map(function(proj) {
+    // 案件IDの短縮版を作成（表示用）
+    const shortId = proj.id ? proj.id.substring(0, 8) : '';
+    
+    return {
+      val: `EXISTING:${proj.id}`,
+      label: `案件#${shortId}: ${proj.locName} - ${proj.equipmentName || proj.equipmentId} - ${proj.workType}`,
+      isNew: false,
+      id: proj.id,
+      locCode: proj.locCode,
+      locName: proj.locName,
+      equipmentName: proj.equipmentName || proj.equipmentId,
+      workType: proj.workType
+    };
+  });
+  
+  // 統合（新規を先に）
+  window.allProjects = [...newProjectOptions, ...existingOptions];
+  
+  console.log('✅ Data merged:', window.allProjects.length);
+  console.log('📊 新規案件:', newProjectOptions.length);
+  console.log('📊 既存案件:', existingOptions.length);
+  console.log('📊 Sample merged data:', window.allProjects.slice(0, 3));
+  
+  // 受信BOXをスキャン
+  scanInbox();
 }
 
 /**
@@ -504,13 +539,16 @@ function updateGroupCheckbox(equipmentName) {
  * 既存案件の選択肢を生成
  */
 function generateExistingProjectOptions(locCode, eqId, locName) {
-  if (!allProjects || allProjects.length === 0) return '';
+  if (!window.allProjects || window.allProjects.length === 0) {
+    console.warn('⚠️ window.allProjects is empty');
+    return '';
+  }
   
-  const sameLocationProjects = allProjects.filter(function(p) {
+  const sameLocationProjects = window.allProjects.filter(function(p) {
     return p.val && p.val.startsWith('EXISTING:') && p.locCode === locCode;
   });
   
-  const otherProjects = allProjects.filter(function(p) {
+  const otherProjects = window.allProjects.filter(function(p) {
     return p.val && p.val.startsWith('EXISTING:') && (!p.locCode || p.locCode !== locCode);
   });
   
@@ -669,7 +707,33 @@ function renderUploadedFiles() {
     card.className = 'bg-white p-4 border rounded shadow-sm mb-3';
     card.dataset.index = index;
     
-    const selectOptions = generateExistingProjectOptions('', '', '');
+    // 全プロジェクトオプションを生成
+    let selectOptions = '<option value="">選択してください</option>';
+    
+    if (window.allProjects && window.allProjects.length > 0) {
+      // 新規案件オプション
+      const newProjects = window.allProjects.filter(function(p) { return p.isNew; });
+      if (newProjects.length > 0) {
+        selectOptions += '<optgroup label="新規案件作成">';
+        newProjects.forEach(function(p) {
+          selectOptions += `<option value="${p.val}">${p.label}</option>`;
+        });
+        selectOptions += '</optgroup>';
+      }
+      
+      // 既存案件オプション
+      const existingProjects = window.allProjects.filter(function(p) { return !p.isNew; });
+      if (existingProjects.length > 0) {
+        selectOptions += '<optgroup label="既存案件">';
+        existingProjects.slice(0, 50).forEach(function(p) { // 最大50件まで表示
+          selectOptions += `<option value="${p.val}">${p.label}</option>`;
+        });
+        selectOptions += '</optgroup>';
+      }
+    } else {
+      console.warn('⚠️ window.allProjects is not ready yet');
+      selectOptions += '<option value="" disabled>データ読み込み中...</option>';
+    }
     
     card.innerHTML = `
       <div class="flex justify-between items-center mb-3">
@@ -684,7 +748,6 @@ function renderUploadedFiles() {
       <div>
         <label class="text-xs font-bold text-gray-500 block mb-1">紐付ける案件を選択</label>
         <select class="upload-project-select w-full border rounded p-2 text-sm bg-white" data-index="${index}">
-          <option value="">選択してください</option>
           ${selectOptions}
         </select>
       </div>
