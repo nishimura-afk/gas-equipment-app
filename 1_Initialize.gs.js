@@ -131,8 +131,13 @@ function initEstimateComparisonSheet() {
  * すべての見積関連シートを初期化
  */
 function initAllEstimateSheets() {
-  initEstimateMasterSheet();
-  initEstimateComparisonSheet();
-  
-  SpreadsheetApp.getUi().alert('✅ 見積管理シートの初期化が完了しました');
+  try {
+    initEstimateMasterSheet();
+    initEstimateComparisonSheet();
+    
+    SpreadsheetApp.getUi().alert('✅ 見積管理シートの初期化が完了しました');
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ エラー: ' + e.message);
+    Logger.log('Error: ' + e.stack);
+  }
 }
