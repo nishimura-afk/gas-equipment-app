@@ -105,37 +105,258 @@ function suggestProjectFromFileName(fileName, projects, equipments) {
   return bestMatch;
 }
 
+/**
+ * 拠点一覧を取得
+ */
+function getStoreList() {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+  const data = sheet.getDataRange().getValues();
+  return data.slice(1).map(row => ({ 
+    code: row[0], 
+    name: row[1] 
+  }));
+}
+
+/**
+ * 設備名を取得
+ */
+function getEquipmentName(locCode, eqId) {
+  try {
+    const list = getEquipmentListCached();
+    const equipment = list.find(e => 
+      e['拠点コード'] === locCode && e['設備ID'] === eqId
+    );
+    return equipment ? equipment['設備名'] : eqId;
+  } catch (e) {
+    return eqId;
+  }
+}
+
+/**
+ * ファイル名から拠点・設備を推測（軽量処理）
+ */
+function suggestFromFileName(fileName, locList) {
+  if (!fileName) return null;
+  
+  const normalized = fileName.normalize('NFKC').toUpperCase();
+  
+  // 拠点名を検索
+  let locCode = null;
+  let locName = null;
+  
+  for (const loc of locList) {
+    if (normalized.includes(loc.name.toUpperCase())) {
+      locCode = loc.code;
+      locName = loc.name;
+      break;
+    }
+  }
+  
+  if (!locCode) return null;
+  
+  // 設備名を推測
+  const equipmentKeywords = {
+    'PUMP-G-01': ['ガソリン', '計量機', 'PUMP'],
+    'PUMP-K-01': ['灯油', '計量機'],
+    'POS-01': ['POS', 'レジ'],
+    'TANK-01': ['タンク', '漏洩', '漏えい'],
+    'LED-C-01': ['LED', 'キャノピー'],
+    'PAINT-01': ['塗装'],
+    'AC-01': ['エアコン', '空調'],
+    'COMP-01': ['コンプレッサー', '圧縮機']
+  };
+  
+  let eqId = null;
+  let eqName = null;
+  
+  for (const [id, keywords] of Object.entries(equipmentKeywords)) {
+    if (keywords.some(kw => normalized.includes(kw))) {
+      eqId = id;
+      eqName = getEquipmentName(locCode, id);
+      break;
+    }
+  }
+  
+  return eqId ? { locCode, locName, eqId, eqName } : null;
+}
+
 function executeImport(filesToImport) {
   const config = getConfig();
   const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  
   let rootFolder;
-  try { rootFolder = DriveApp.getFolderById(USER_DRIVE_ID); } catch(e) { rootFolder = DriveApp.getRootFolder(); }
-  const archiveFolders = rootFolder.getFoldersByName(ARCHIVE_FOLDER_NAME);
-  const archiveFolder = archiveFolders.hasNext() ? archiveFolders.next() : rootFolder.createFolder(ARCHIVE_FOLDER_NAME);
+  try { 
+    rootFolder = DriveApp.getFolderById(USER_DRIVE_ID); 
+  } catch(e) { 
+    rootFolder = DriveApp.getRootFolder(); 
+  }
+  
+  // 処理済フォルダの取得
+  const parentFolders = rootFolder.getParents();
+  let parentFolder;
+  if (parentFolders.hasNext()) {
+    parentFolder = parentFolders.next();
+  } else {
+    parentFolder = rootFolder;
+  }
+  
+  const archiveFolders = parentFolder.getFoldersByName(ARCHIVE_FOLDER_NAME);
+  const archiveFolder = archiveFolders.hasNext() 
+    ? archiveFolders.next() 
+    : parentFolder.createFolder(ARCHIVE_FOLDER_NAME);
+  
+  // 拠点マスタ取得
   const locList = getStoreList();
   const locMap = {};
   locList.forEach(l => locMap[l.code] = l.name);
+  
   let successCount = 0;
+  let errorCount = 0;
+  const errors = [];
 
-  filesToImport.forEach(item => {
+  filesToImport.forEach((item, index) => {
     try {
-      const file = DriveApp.getFileById(item.fileId);
-      if (item.projectType === 'NEW') {
-        const uniqueId = Utilities.getUuid();
-        scheduleSheet.appendRow([uniqueId, item.locCode, item.eqId, '見積受領(インポート)', '', config.PROJECT_STATUS.ESTIMATE_RCV, '', '']);
-      }
-      getSheet(config.SHEET_NAMES.HISTORY).appendRow([item.locCode, item.eqId, '見積書登録', new Date(), `File: ${file.getName()}\nUrl: ${file.getUrl()}`, '']);
+      Logger.log(`[${index + 1}/${filesToImport.length}] Processing: ${item.fileId}`);
       
-      const newName = `[${item.locCode}]${item.eqId}_見積_${Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd')}.pdf`;
+      const file = DriveApp.getFileById(item.fileId);
+      const originalName = file.getName();
+      
+      // ========================================
+      // 【重要】ファイル名ベースの軽量解析
+      // （Gemini APIは使わない）
+      // ========================================
+      
+      // 案件情報を整理
+      let locCode = item.locCode;
+      let locName = locMap[locCode] || locCode;
+      let eqId = item.eqId;
+      let eqName = '';
+      
+      // 設備名を取得
+      if (locCode && eqId) {
+        eqName = getEquipmentName(locCode, eqId);
+      }
+      
+      // もしユーザーが「新規案件作成」を選ばなかった場合、
+      // ファイル名から推測を試みる
+      if (!locCode || !eqId) {
+        const suggestion = suggestFromFileName(originalName, locList);
+        if (suggestion) {
+          locCode = suggestion.locCode;
+          locName = suggestion.locName;
+          eqId = suggestion.eqId;
+          eqName = suggestion.eqName;
+        }
+      }
+      
+      // 見積リンクを記録（軽量処理）
+      const fileInfo = {
+        id: file.getId(),
+        name: originalName,
+        url: file.getUrl()
+      };
+      
+      const projectInfo = {
+        projectId: item.projectType === 'EXISTING' ? item.projectId : null,
+        locCode: locCode,
+        locName: locName,
+        eqId: eqId,
+        eqName: eqName
+      };
+      
+      // 見積比較シートに記録
+      saveEstimateLink(fileInfo, projectInfo);
+      
+      // 新規案件の場合のみ案件作成
+      if (item.projectType === 'NEW' && locCode && eqId) {
+        const uniqueId = Utilities.getUuid();
+        scheduleSheet.appendRow([
+          uniqueId, 
+          locCode, 
+          eqId, 
+          '見積受領(インポート)', 
+          '', 
+          config.PROJECT_STATUS.ESTIMATE_RCV, 
+          '', 
+          ''
+        ]);
+      }
+      
+      // 履歴に記録
+      if (locCode && eqId) {
+        getSheet(config.SHEET_NAMES.HISTORY).appendRow([
+          locCode, 
+          eqId, 
+          '見積書登録', 
+          new Date(), 
+          `File: ${originalName}\nUrl: ${file.getUrl()}`, 
+          ''
+        ]);
+      }
+      
+      // ========================================
+      // 【重要】リネーム処理
+      // ========================================
+      const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd');
+      let newName;
+      
+      if (locCode && eqId) {
+        newName = `[${locCode}]${eqId}_見積_${timestamp}.pdf`;
+      } else {
+        // 情報が不足している場合は元のファイル名を保持
+        newName = `未分類_${originalName}`;
+      }
+      
       file.setName(newName);
-      const shopName = locMap[item.locCode] || item.locCode;
-      const subFolders = archiveFolder.getFoldersByName(shopName);
-      const targetFolder = subFolders.hasNext() ? subFolders.next() : archiveFolder.createFolder(shopName);
+      Logger.log(`✅ Renamed: ${originalName} → ${newName}`);
+      
+      // ========================================
+      // 【重要】フォルダ振り分け
+      // ========================================
+      let targetFolder;
+      
+      if (locCode && locName) {
+        // 店舗フォルダに移動
+        const subFolders = archiveFolder.getFoldersByName(locName);
+        targetFolder = subFolders.hasNext() 
+          ? subFolders.next() 
+          : archiveFolder.createFolder(locName);
+      } else {
+        // 未分類フォルダに移動
+        const unclassifiedFolders = archiveFolder.getFoldersByName('未分類');
+        targetFolder = unclassifiedFolders.hasNext()
+          ? unclassifiedFolders.next()
+          : archiveFolder.createFolder('未分類');
+      }
+      
       file.moveTo(targetFolder);
+      Logger.log(`✅ Moved to: ${targetFolder.getName()}`);
+      
       successCount++;
-    } catch (e) { console.error('Import Error', e); }
+      
+    } catch (e) {
+      errorCount++;
+      errors.push(`${item.fileId}: ${e.message}`);
+      Logger.log(`❌ Error processing ${item.fileId}: ${e.message}`);
+    }
   });
-  return { success: true, message: `${successCount}件処理完了`, folderUrl: archiveFolder.getUrl() };
+  
+  // 結果メッセージ
+  let message = `✅ ${successCount}件処理完了`;
+  
+  if (errorCount > 0) {
+    message += `\n⚠️ ${errorCount}件でエラーが発生しました`;
+    Logger.log('Errors: ' + JSON.stringify(errors));
+  }
+  
+  return { 
+    success: true, 
+    message: message,
+    successCount: successCount,
+    errorCount: errorCount,
+    folderUrl: archiveFolder.getUrl() 
+  };
 }
 
 function uploadAndImport(data, fileName, mimeType, projectInfo) {

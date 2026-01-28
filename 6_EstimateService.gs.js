@@ -15,6 +15,43 @@ function generateEstimateId() {
 }
 
 /**
+ * 見積リンクを記録（簡易版 - Gemini API不使用）
+ * @param {Object} fileInfo - {id, name, url}
+ * @param {Object} projectInfo - {projectId, locCode, locName, eqId, eqName}
+ * @return {string} 見積ID
+ */
+function saveEstimateLink(fileInfo, projectInfo) {
+  const config = getConfig();
+  const headerSheet = getSheet(config.SHEET_NAMES.ESTIMATE_HEADER);
+  
+  const estimateId = generateEstimateId();
+  
+  // 最小限の情報のみ記録（業者名・金額は空欄 - 手動入力）
+  const newRow = [
+    estimateId,                           // 見積ID
+    projectInfo.projectId || '',         // 案件ID
+    projectInfo.locCode || '',           // 拠点コード
+    projectInfo.locName || '',           // 拠点名
+    projectInfo.eqId || '',              // 設備ID
+    projectInfo.eqName || '',            // 設備名
+    '',                                   // 業者名（空欄 - 手動入力）
+    '',                                   // 見積日（空欄 - 手動入力）
+    '',                                   // 総額(税抜)（空欄 - 手動入力）
+    '',                                   // 消費税（空欄 - 手動入力）
+    '',                                   // 総額(税込)（空欄 - 手動入力）
+    '',                                   // 諸経費（空欄 - 手動入力）
+    fileInfo.name,                        // PDFファイル名
+    fileInfo.url,                         // PDFリンク
+    new Date()                            // 登録日
+  ];
+  
+  headerSheet.appendRow(newRow);
+  
+  Logger.log(`✅ 見積リンク記録: ${estimateId} - ${projectInfo.locName || ''} ${projectInfo.eqName || ''}`);
+  return estimateId;
+}
+
+/**
  * 見積ヘッダーを登録
  */
 function saveEstimateHeader(estimateData) {
