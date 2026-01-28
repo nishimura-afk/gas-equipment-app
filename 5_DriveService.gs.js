@@ -75,7 +75,17 @@ function suggestProjectFromFileName(fileName, projects, equipments) {
     if (p.equipmentId && normalized.includes(p.equipmentId)) score += 8;
     if (score > maxScore && score >= 10) {
       maxScore = score;
-      bestMatch = { type: 'EXISTING', id: p.id, label: `【既存】${p.locName}-${p.workType}`, locCode: p.locCode, eqId: p.equipmentId };
+      // 案件IDの短縮版を作成（表示用）
+      const shortId = p.id ? p.id.substring(0, 8) : '';
+      bestMatch = { 
+        type: 'EXISTING', 
+        id: p.id, 
+        label: `案件#${shortId}: ${p.locName} - ${p.workType}`,
+        detailLabel: `${p.locName} - ${p.equipmentName || p.equipmentId} - ${p.workType}`,
+        locCode: p.locCode, 
+        eqId: p.equipmentId,
+        equipmentName: p.equipmentName || p.equipmentId
+      };
     }
   });
   if (bestMatch) return bestMatch;

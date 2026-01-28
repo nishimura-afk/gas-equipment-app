@@ -85,13 +85,40 @@ let currentFiles = [];
 let allProjects = []; 
 
 function importInit() {
-  google.script.run.withSuccessHandler(list => {
-    allProjects = list.map(item => ({
-      val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
-      label: `【新規】${item['拠点名']} - ${item['設備名']}`
-    }));
-    scanInbox();
-  }).getEquipmentList();
+  // 既存案件を取得（詳細情報を含む）
+  google.script.run
+    .withSuccessHandler(projects => {
+      // 既存案件の詳細情報を保持
+      const existingProjects = projects.map(item => {
+        // 案件IDの短縮版を作成（表示用）
+        const shortId = item.id ? item.id.substring(0, 8) : '';
+        
+        return {
+          val: `EXISTING:${item.id}`,
+          label: `案件#${shortId}: ${item.locName} - ${item.equipmentName || item.equipmentId} - ${item.workType}`,
+          locCode: item.locCode,
+          id: item.id
+        };
+      });
+      
+      // 設備一覧も取得（新規案件用）
+      google.script.run
+        .withSuccessHandler(list => {
+          // 新規案件用のデータも保持
+          const newProjectOptions = list.map(item => ({
+            val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
+            label: `【新規】${item['拠点名']} - ${item['設備名']}`,
+            locCode: item['拠点コード']
+          }));
+          
+          // allProjectsに統合
+          allProjects = [...existingProjects, ...newProjectOptions];
+          
+          scanInbox();
+        })
+        .getEquipmentList();
+    })
+    .getAllActiveProjects();
 }
 
 function switchTab(tab) {
@@ -151,7 +178,8 @@ function renderFiles(res) {
           file: file,
           idx: idx,
           projectId: file.suggestion.id,
-          label: file.suggestion.label
+          label: file.suggestion.label,
+          detailLabel: file.suggestion.detailLabel || file.suggestion.label
         });
       } else if (file.suggestion.type === 'NEW') {
         // 新規案件 - 設備名でグループ化
@@ -247,6 +275,9 @@ function createExistingProjectItem(item) {
   const div = document.createElement('div');
   div.className = "bg-white p-3 border-b flex items-center gap-3 hover:bg-blue-50";
   
+  // detailLabelを使用して詳細表示（設備名を含む）
+  const displayLabel = item.detailLabel || item.label;
+  
   div.innerHTML = `
     <input type="checkbox" 
            class="import-check w-5 h-5 accent-blue-600" 
@@ -254,8 +285,8 @@ function createExistingProjectItem(item) {
            checked
            onchange="updateBulkCount()">
     <div class="flex-1 min-w-0">
-      <div class="font-bold text-sm text-blue-600 truncate">
-        <i class="fas fa-link mr-1"></i>${item.label}
+      <div class="font-bold text-sm text-blue-600">
+        <i class="fas fa-link mr-1"></i>${displayLabel}
       </div>
       <div class="text-xs text-gray-500 mt-1">
         <a href="${item.file.url}" target="_blank" class="hover:underline">
@@ -263,7 +294,7 @@ function createExistingProjectItem(item) {
         </a>
       </div>
     </div>
-    <select class="border rounded p-1 text-sm import-select" data-idx="${item.idx}">
+    <select class="border rounded p-1 text-sm import-select bg-white" data-idx="${item.idx}">
       <option value="EXISTING:${item.projectId}" selected>この案件に紐付け</option>
     </select>
   `;
@@ -313,6 +344,9 @@ function createNewEquipmentGroup(equipmentName, items) {
     const itemDiv = document.createElement('div');
     itemDiv.className = "p-3 pl-12 border-t flex items-center gap-3 hover:bg-white";
     
+    // ドロップダウンに複数の選択肢を追加
+    const selectOptions = generateExistingProjectOptions(item.locCode, item.eqId, item.locName);
+    
     itemDiv.innerHTML = `
       <input type="checkbox" 
              class="import-check equipment-check w-4 h-4 accent-green-600" 
@@ -326,8 +360,10 @@ function createNewEquipmentGroup(equipmentName, items) {
           <i class="fas fa-file-pdf mr-1"></i>${item.file.name}
         </a>
       </div>
-      <select class="border rounded p-1 text-xs import-select" data-idx="${item.idx}">
+      <select class="border rounded p-1 text-xs import-select bg-white" data-idx="${item.idx}">
         <option value="NEW:${item.locCode}:${item.eqId}" selected>新規案件作成</option>
+        <option disabled>─────────────────</option>
+        ${selectOptions}
       </select>
     `;
     
@@ -390,6 +426,43 @@ function updateGroupCheckbox(equipmentName) {
     groupCheckbox.checked = false;
     groupCheckbox.indeterminate = true;
   }
+}
+
+/**
+ * 既存案件の選択肢を生成（同じ拠点の案件を優先表示）
+ */
+function generateExistingProjectOptions(locCode, eqId, locName) {
+  if (!allProjects || allProjects.length === 0) return '';
+  
+  // 同じ拠点の案件を抽出
+  const sameLocationProjects = allProjects.filter(p => 
+    p.val && p.val.startsWith('EXISTING:') && p.locCode === locCode
+  );
+  
+  // その他の案件を抽出
+  const otherProjects = allProjects.filter(p => 
+    p.val && p.val.startsWith('EXISTING:') && (!p.locCode || p.locCode !== locCode)
+  );
+  
+  let options = '';
+  
+  if (sameLocationProjects.length > 0) {
+    options += '<optgroup label="この拠点の既存案件">';
+    sameLocationProjects.forEach(p => {
+      options += `<option value="${p.val}">${p.label}</option>`;
+    });
+    options += '</optgroup>';
+  }
+  
+  if (otherProjects.length > 0) {
+    options += '<optgroup label="その他の案件">';
+    otherProjects.slice(0, 10).forEach(p => { // 最大10件まで表示
+      options += `<option value="${p.val}">${p.label}</option>`;
+    });
+    options += '</optgroup>';
+  }
+  
+  return options;
 }
 
 function updateBulkCount() {
