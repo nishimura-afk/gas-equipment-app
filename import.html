@@ -18,6 +18,7 @@
     </button>
   </div>
 
+  <!-- 受信BOXタブ -->
   <div id="area-inbox" class="tab-content">
     <div class="bg-blue-50 border border-blue-200 rounded p-4 mb-4 flex justify-between items-center">
       <div>
@@ -33,6 +34,7 @@
     </div>
   </div>
 
+  <!-- Driveフォルダ指定タブ -->
   <div id="area-drive" class="tab-content hidden">
     <div class="bg-white border rounded p-6 text-center">
       <p class="mb-4 text-sm text-gray-600">過去の見積書が保存されているDriveフォルダIDを入力してください。</p>
@@ -46,50 +48,58 @@
     <div id="drive-list" class="space-y-2 mt-4"></div>
   </div>
 
+  <!-- PCからアップロードタブ -->
   <div id="area-local" class="tab-content hidden">
     <div class="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center bg-gray-50 hover:bg-gray-100 transition relative" id="drop-zone">
-      <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect(this)">
+      <input type="file" id="file-input" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" multiple accept="application/pdf" onchange="handleFileSelect(this)">
       <div class="pointer-events-none">
         <i class="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-2"></i>
         <p class="font-bold text-gray-600">ここにファイルをドラッグ&ドロップ</p>
-        <p class="text-xs text-gray-400 mt-1">またはクリックして選択 (PDFのみ)</p>
+        <p class="text-xs text-gray-400 mt-1">またはクリックして選択 (PDFのみ、複数選択可)</p>
       </div>
     </div>
-    <div id="upload-preview" class="mt-4 hidden">
-      <div class="bg-white p-4 border rounded shadow-sm">
-        <div class="flex justify-between items-center mb-2">
-          <span class="font-bold" id="upload-filename"></span>
-          <span class="text-xs text-gray-400" id="upload-size"></span>
-        </div>
-        <div class="mb-2">
-          <label class="text-xs font-bold text-gray-500">紐付ける案件を選択</label>
-          <select id="upload-project-select" class="w-full border rounded p-2 mt-1"></select>
-        </div>
-        <button onclick="execUpload()" class="w-full bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 shadow">
-          アップロードして登録
-        </button>
-      </div>
+    <div id="upload-preview" class="mt-4 space-y-3 hidden">
+      <!-- 各ファイルごとにカードを動的に生成 -->
     </div>
   </div>
 
+  <!-- 一括操作ボタン（受信BOX・Drive用） -->
   <div id="bulk-action-area" class="hidden fixed bottom-6 right-6 z-50">
     <button onclick="execBulkImport()" class="bg-green-600 text-white px-8 py-4 rounded-full shadow-lg font-bold hover:bg-green-700 flex items-center transform transition hover:scale-105">
       <i class="fas fa-check-circle text-xl mr-2"></i>
       <span id="bulk-count">0</span>件を登録して整理
     </button>
   </div>
+
+  <!-- PCアップロード用の一括操作ボタン -->
+  <div id="upload-bulk-action-area" class="hidden fixed bottom-6 right-6 z-50">
+    <button onclick="execBulkUpload()" class="bg-green-600 text-white px-8 py-4 rounded-full shadow-lg font-bold hover:bg-green-700 flex items-center transform transition hover:scale-105">
+      <i class="fas fa-check-circle text-xl mr-2"></i>
+      <span id="upload-bulk-count">0</span>件を登録して整理
+    </button>
+  </div>
 </div>
 
 <script>
+console.log('✅ import.html script loaded');
+
 let currentFiles = []; 
 let allProjects = []; 
+let uploadedFiles = []; // PCアップロード用のファイル配列
 
+/**
+ * ページ初期化
+ */
 function importInit() {
+  console.log('🚀 importInit called');
+  
   // 既存案件を取得（詳細情報を含む）
   google.script.run
-    .withSuccessHandler(projects => {
+    .withSuccessHandler(function(projects) {
+      console.log('✅ getAllActiveProjects success:', projects);
+      
       // 既存案件の詳細情報を保持
-      const existingProjects = projects.map(item => {
+      const existingProjects = projects.map(function(item) {
         // 案件IDの短縮版を作成（表示用）
         const shortId = item.id ? item.id.substring(0, 8) : '';
         
@@ -103,55 +113,131 @@ function importInit() {
       
       // 設備一覧も取得（新規案件用）
       google.script.run
-        .withSuccessHandler(list => {
+        .withSuccessHandler(function(list) {
+          console.log('✅ getEquipmentList success:', list);
+          
           // 新規案件用のデータも保持
-          const newProjectOptions = list.map(item => ({
-            val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
-            label: `【新規】${item['拠点名']} - ${item['設備名']}`,
-            locCode: item['拠点コード']
-          }));
+          const newProjectOptions = list.map(function(item) {
+            return {
+              val: `NEW:${item['拠点コード']}:${item['設備ID']}`,
+              label: `【新規】${item['拠点名']} - ${item['設備名']}`,
+              locCode: item['拠点コード']
+            };
+          });
           
           // allProjectsに統合
           allProjects = [...existingProjects, ...newProjectOptions];
+          console.log('✅ allProjects initialized:', allProjects.length, 'items');
           
+          // 受信BOXをスキャン
           scanInbox();
         })
+        .withFailureHandler(function(error) {
+          console.error('❌ getEquipmentList failed:', error);
+          alert('設備データの取得に失敗しました: ' + error);
+        })
         .getEquipmentList();
+    })
+    .withFailureHandler(function(error) {
+      console.error('❌ getAllActiveProjects failed:', error);
+      alert('案件データの取得に失敗しました: ' + error);
     })
     .getAllActiveProjects();
 }
 
+/**
+ * タブ切り替え
+ */
 function switchTab(tab) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  console.log('🔄 Switching to tab:', tab);
+  
+  document.querySelectorAll('.tab-content').forEach(function(el) {
+    el.classList.add('hidden');
+  });
   document.getElementById('area-' + tab).classList.remove('hidden');
-  document.querySelectorAll('button[id^="tab-"]').forEach(btn => {
+  
+  document.querySelectorAll('button[id^="tab-"]').forEach(function(btn) {
     btn.classList.remove('bg-white', 'shadow', 'text-blue-600');
     btn.classList.add('text-gray-500', 'hover:bg-gray-200');
   });
+  
   const activeBtn = document.getElementById('tab-' + tab);
   activeBtn.classList.remove('text-gray-500', 'hover:bg-gray-200');
   activeBtn.classList.add('bg-white', 'shadow', 'text-blue-600');
+  
+  // PCアップロードタブの場合は一括操作ボタンを切り替え
+  if (tab === 'local') {
+    document.getElementById('bulk-action-area').classList.add('hidden');
+  } else {
+    document.getElementById('upload-bulk-action-area').classList.add('hidden');
+  }
 }
 
+/**
+ * 受信BOXをスキャン
+ */
 function scanInbox() {
+  console.log('📥 Scanning inbox...');
   showLoading(true);
   document.getElementById('inbox-list').innerHTML = '<div class="p-4 text-center">スキャン中...</div>';
-  google.script.run.withSuccessHandler(renderFiles).scanInboxFiles();
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      console.log('✅ scanInboxFiles success:', res);
+      renderFiles(res);
+    })
+    .withFailureHandler(function(error) {
+      console.error('❌ scanInboxFiles failed:', error);
+      showLoading(false);
+      alert('スキャンに失敗しました: ' + error);
+    })
+    .scanInboxFiles();
 }
 
+/**
+ * Driveフォルダをスキャン
+ */
 function scanDrive() {
   const id = document.getElementById('drive-folder-id').value;
-  if(!id) return alert('フォルダIDを入力してください');
+  if (!id) {
+    alert('フォルダIDを入力してください');
+    return;
+  }
+  
+  console.log('📁 Scanning drive folder:', id);
   showLoading(true);
-  google.script.run.withSuccessHandler(res => {
-    if(!res.success) { showLoading(false); alert(res.error); return; }
-    renderFiles(res);
-  }).scanDriveFolder(id);
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      console.log('✅ scanDriveFolder success:', res);
+      if (!res.success) {
+        showLoading(false);
+        alert(res.error);
+        return;
+      }
+      renderFiles(res);
+    })
+    .withFailureHandler(function(error) {
+      console.error('❌ scanDriveFolder failed:', error);
+      showLoading(false);
+      alert('スキャンに失敗しました: ' + error);
+    })
+    .scanDriveFolder(id);
 }
 
+/**
+ * ファイル一覧を描画（受信BOX・Drive用）
+ */
 function renderFiles(res) {
+  console.log('🎨 Rendering files:', res);
   showLoading(false);
+  
   const container = document.querySelector('.tab-content:not(.hidden) div[id$="-list"]');
+  if (!container) {
+    console.error('❌ Container not found');
+    return;
+  }
+  
   container.innerHTML = '';
   
   if (res.files.length === 0) {
@@ -162,18 +248,13 @@ function renderFiles(res) {
 
   currentFiles = res.files;
 
-  // ========================================
-  // 【重要】案件化済み/未案件化に分類
-  // ========================================
+  // 案件化済み/未案件化に分類
+  const existingProjects = [];
+  const newEquipments = {};
   
-  // Step 1: 案件化済み/未案件化に分類
-  const existingProjects = []; // 既存案件
-  const newEquipments = {};     // 新規（設備種別でグループ化）
-  
-  res.files.forEach((file, idx) => {
+  res.files.forEach(function(file, idx) {
     if (file.suggestion) {
       if (file.suggestion.type === 'EXISTING') {
-        // 既存案件
         existingProjects.push({
           file: file,
           idx: idx,
@@ -182,7 +263,6 @@ function renderFiles(res) {
           detailLabel: file.suggestion.detailLabel || file.suggestion.label
         });
       } else if (file.suggestion.type === 'NEW') {
-        // 新規案件 - 設備名でグループ化
         const equipmentName = getBaseEquipmentName(file.suggestion.eqName);
         
         if (!newEquipments[equipmentName]) {
@@ -201,25 +281,26 @@ function renderFiles(res) {
     }
   });
 
-  // Step 2: 案件化済みセクションを描画
+  // 案件化済みセクションを描画
   if (existingProjects.length > 0) {
     const section = createSectionHeader('案件化済み', existingProjects.length, 'blue');
     container.appendChild(section);
     
-    existingProjects.forEach(item => {
+    existingProjects.forEach(function(item) {
       const div = createExistingProjectItem(item);
       container.appendChild(div);
     });
   }
 
-  // Step 3: 新規案件セクションを描画
+  // 新規案件セクションを描画
   if (Object.keys(newEquipments).length > 0) {
-    const totalNew = Object.values(newEquipments).reduce((sum, items) => sum + items.length, 0);
+    const totalNew = Object.values(newEquipments).reduce(function(sum, items) {
+      return sum + items.length;
+    }, 0);
     const section = createSectionHeader('新規案件', totalNew, 'green');
     container.appendChild(section);
     
-    // 設備種別ごとにグループ表示
-    Object.keys(newEquipments).sort().forEach(equipmentName => {
+    Object.keys(newEquipments).sort().forEach(function(equipmentName) {
       const items = newEquipments[equipmentName];
       const div = createNewEquipmentGroup(equipmentName, items);
       container.appendChild(div);
@@ -234,19 +315,14 @@ function renderFiles(res) {
  */
 function getBaseEquipmentName(equipmentName) {
   if (!equipmentName) return '不明な設備';
-  // 括弧とその中身を削除
   return equipmentName.replace(/[(\(（].*?[)\)）]/g, '').trim();
 }
 
 /**
  * セクションヘッダーを作成
  */
-/**
- * セクションヘッダーを作成
- */
 function createSectionHeader(title, count, color) {
   const section = document.createElement('div');
-  // Tailwindの動的クラス名を避けて、固定クラス名を使用
   let className, badgeClassName;
   if (color === 'blue') {
     className = 'bg-blue-50 border-blue-200 border-b-2 p-3 font-bold text-blue-800 flex items-center gap-2';
@@ -275,7 +351,6 @@ function createExistingProjectItem(item) {
   const div = document.createElement('div');
   div.className = "bg-white p-3 border-b flex items-center gap-3 hover:bg-blue-50";
   
-  // detailLabelを使用して詳細表示（設備名を含む）
   const displayLabel = item.detailLabel || item.label;
   
   div.innerHTML = `
@@ -309,12 +384,11 @@ function createNewEquipmentGroup(equipmentName, items) {
   const groupDiv = document.createElement('div');
   groupDiv.className = "border-b";
   
-  // グループヘッダー
   const header = document.createElement('div');
   header.className = "bg-green-50 p-3 flex items-center gap-3 cursor-pointer hover:bg-green-100";
-  header.onclick = () => toggleGroup(equipmentName);
+  header.onclick = function() { toggleGroup(equipmentName); };
   
-  const storeList = items.map(i => i.locName).join('、');
+  const storeList = items.map(function(i) { return i.locName; }).join('、');
   const storeCount = items.length;
   
   header.innerHTML = `
@@ -335,16 +409,14 @@ function createNewEquipmentGroup(equipmentName, items) {
     <i class="fas fa-chevron-up text-gray-400" id="chevron-${equipmentName}"></i>
   `;
   
-  // グループボディ（折りたたみ可能、初期状態は展開）
   const body = document.createElement('div');
   body.id = `group-body-${equipmentName}`;
   body.className = "bg-gray-50";
   
-  items.forEach(item => {
+  items.forEach(function(item) {
     const itemDiv = document.createElement('div');
     itemDiv.className = "p-3 pl-12 border-t flex items-center gap-3 hover:bg-white";
     
-    // ドロップダウンに複数の選択肢を追加
     const selectOptions = generateExistingProjectOptions(item.locCode, item.eqId, item.locName);
     
     itemDiv.innerHTML = `
@@ -401,7 +473,7 @@ function toggleGroupCheckboxes(equipmentName) {
   const groupCheckbox = document.querySelector(`.group-checkbox[data-equipment="${equipmentName}"]`);
   const itemCheckboxes = document.querySelectorAll(`.equipment-check[data-equipment="${equipmentName}"]`);
   
-  itemCheckboxes.forEach(cb => {
+  itemCheckboxes.forEach(function(cb) {
     cb.checked = groupCheckbox.checked;
   });
   
@@ -414,7 +486,7 @@ function toggleGroupCheckboxes(equipmentName) {
 function updateGroupCheckbox(equipmentName) {
   const groupCheckbox = document.querySelector(`.group-checkbox[data-equipment="${equipmentName}"]`);
   const itemCheckboxes = document.querySelectorAll(`.equipment-check[data-equipment="${equipmentName}"]`);
-  const checkedCount = Array.from(itemCheckboxes).filter(cb => cb.checked).length;
+  const checkedCount = Array.from(itemCheckboxes).filter(function(cb) { return cb.checked; }).length;
   
   if (checkedCount === 0) {
     groupCheckbox.checked = false;
@@ -429,26 +501,24 @@ function updateGroupCheckbox(equipmentName) {
 }
 
 /**
- * 既存案件の選択肢を生成（同じ拠点の案件を優先表示）
+ * 既存案件の選択肢を生成
  */
 function generateExistingProjectOptions(locCode, eqId, locName) {
   if (!allProjects || allProjects.length === 0) return '';
   
-  // 同じ拠点の案件を抽出
-  const sameLocationProjects = allProjects.filter(p => 
-    p.val && p.val.startsWith('EXISTING:') && p.locCode === locCode
-  );
+  const sameLocationProjects = allProjects.filter(function(p) {
+    return p.val && p.val.startsWith('EXISTING:') && p.locCode === locCode;
+  });
   
-  // その他の案件を抽出
-  const otherProjects = allProjects.filter(p => 
-    p.val && p.val.startsWith('EXISTING:') && (!p.locCode || p.locCode !== locCode)
-  );
+  const otherProjects = allProjects.filter(function(p) {
+    return p.val && p.val.startsWith('EXISTING:') && (!p.locCode || p.locCode !== locCode);
+  });
   
   let options = '';
   
   if (sameLocationProjects.length > 0) {
     options += '<optgroup label="この拠点の既存案件">';
-    sameLocationProjects.forEach(p => {
+    sameLocationProjects.forEach(function(p) {
       options += `<option value="${p.val}">${p.label}</option>`;
     });
     options += '</optgroup>';
@@ -456,7 +526,7 @@ function generateExistingProjectOptions(locCode, eqId, locName) {
   
   if (otherProjects.length > 0) {
     options += '<optgroup label="その他の案件">';
-    otherProjects.slice(0, 10).forEach(p => { // 最大10件まで表示
+    otherProjects.slice(0, 10).forEach(function(p) {
       options += `<option value="${p.val}">${p.label}</option>`;
     });
     options += '</optgroup>';
@@ -465,98 +535,314 @@ function generateExistingProjectOptions(locCode, eqId, locName) {
   return options;
 }
 
+/**
+ * 一括カウント更新
+ */
 function updateBulkCount() {
   const count = document.querySelectorAll('.import-check:checked').length;
-  document.getElementById('bulk-count').innerText = count;
-  if(count > 0) document.getElementById('bulk-action-area').classList.remove('hidden');
-  else document.getElementById('bulk-action-area').classList.add('hidden');
+  const countElement = document.getElementById('bulk-count');
+  if (countElement) {
+    countElement.textContent = count;
+  }
+  
+  const bulkArea = document.getElementById('bulk-action-area');
+  if (bulkArea) {
+    if (count > 0) {
+      bulkArea.classList.remove('hidden');
+    } else {
+      bulkArea.classList.add('hidden');
+    }
+  }
 }
 
+/**
+ * 一括インポート実行（受信BOX・Drive用）
+ */
 function execBulkImport() {
   const checked = document.querySelectorAll('.import-check:checked');
-  if(checked.length === 0) return;
-  if(!confirm(`${checked.length}件のファイルを登録し、処理済フォルダに移動しますか？`)) return;
+  if (checked.length === 0) return;
+  
+  if (!confirm(`${checked.length}件のファイルを登録し、処理済フォルダに移動しますか？`)) return;
 
   const targets = [];
   let error = false;
 
-  checked.forEach(el => {
+  checked.forEach(function(el) {
     const idx = el.dataset.idx;
     const file = currentFiles[idx];
     const select = document.querySelector(`.import-select[data-idx="${idx}"]`);
     const val = select.value;
     
-    if (!val) { error = true; select.classList.add('border-red-500'); }
-    else {
+    if (!val) {
+      error = true;
+      select.classList.add('border-red-500');
+    } else {
       select.classList.remove('border-red-500');
       const parts = val.split(':');
       targets.push({
         fileId: file.id,
         projectType: parts[0],
-        projectId: parts[0]==='EXISTING'?parts[1]:null,
-        locCode: parts[0]==='NEW'?parts[1]:null,
-        eqId: parts[0]==='NEW'?parts[2]:null
+        projectId: parts[0] === 'EXISTING' ? parts[1] : null,
+        locCode: parts[0] === 'NEW' ? parts[1] : null,
+        eqId: parts[0] === 'NEW' ? parts[2] : null
       });
     }
   });
 
-  if (error) return alert('紐付け先が選択されていないファイルがあります');
+  if (error) {
+    alert('紐付け先が選択されていないファイルがあります');
+    return;
+  }
 
+  console.log('📤 Executing bulk import:', targets);
   showLoading(true);
-  google.script.run.withSuccessHandler(res => {
-    showLoading(false);
-    alert(res.message);
-    const activeTab = document.querySelector('button[id^="tab-"].text-blue-600').id.replace('tab-', '');
-    if(activeTab === 'inbox') scanInbox();
-    else if(activeTab === 'drive') scanDrive();
-  }).executeImport(targets);
+  
+  google.script.run
+    .withSuccessHandler(function(res) {
+      console.log('✅ execBulkImport success:', res);
+      showLoading(false);
+      alert(res.message);
+      const activeTab = document.querySelector('button[id^="tab-"].text-blue-600');
+      if (activeTab) {
+        const tabName = activeTab.id.replace('tab-', '');
+        if (tabName === 'inbox') {
+          scanInbox();
+        } else if (tabName === 'drive') {
+          scanDrive();
+        }
+      }
+    })
+    .withFailureHandler(function(error) {
+      console.error('❌ execBulkImport failed:', error);
+      showLoading(false);
+      alert('エラー: ' + error);
+    })
+    .executeImport(targets);
 }
 
-let uploadFile = null;
-
+/**
+ * PCアップロード: ファイル選択処理（複数ファイル対応）
+ */
 function handleFileSelect(input) {
-  const file = input.files[0];
-  if (!file || file.type !== 'application/pdf') return alert('PDFファイルを選択してください');
+  const files = input.files;
+  if (!files || files.length === 0) return;
   
-  uploadFile = file;
-  document.getElementById('upload-preview').classList.remove('hidden');
-  document.getElementById('upload-filename').innerText = file.name;
-  document.getElementById('upload-size').innerText = (file.size/1024).toFixed(1) + ' KB';
+  console.log('📁 Files selected:', files.length);
   
-  const sel = document.getElementById('upload-project-select');
-  sel.innerHTML = '<option value="">選択してください</option>';
-  allProjects.forEach(p => {
-    const op = document.createElement('option');
-    op.value = p.val;
-    op.innerText = p.label;
-    sel.appendChild(op);
+  uploadedFiles = [];
+  
+  Array.from(files).forEach(function(file) {
+    if (file.type !== 'application/pdf') {
+      alert(`${file.name} はPDFファイルではありません。スキップします。`);
+      return;
+    }
+    
+    uploadedFiles.push({
+      file: file,
+      name: file.name,
+      size: file.size,
+      selected: true
+    });
+  });
+  
+  if (uploadedFiles.length === 0) {
+    alert('PDFファイルを選択してください');
+    return;
+  }
+  
+  renderUploadedFiles();
+  updateUploadBulkCount();
+}
+
+/**
+ * アップロードされたファイル一覧を描画
+ */
+function renderUploadedFiles() {
+  const container = document.getElementById('upload-preview');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  container.classList.remove('hidden');
+  
+  uploadedFiles.forEach(function(fileData, index) {
+    const card = document.createElement('div');
+    card.className = 'bg-white p-4 border rounded shadow-sm mb-3';
+    card.dataset.index = index;
+    
+    const selectOptions = generateExistingProjectOptions('', '', '');
+    
+    card.innerHTML = `
+      <div class="flex justify-between items-center mb-3">
+        <div class="flex-1">
+          <div class="font-bold text-sm">${fileData.name}</div>
+          <div class="text-xs text-gray-400 mt-1">${(fileData.size / 1024).toFixed(1)} KB</div>
+        </div>
+        <button onclick="removeUploadedFile(${index})" class="text-red-500 hover:text-red-700 ml-2">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-gray-500 block mb-1">紐付ける案件を選択</label>
+        <select class="upload-project-select w-full border rounded p-2 text-sm bg-white" data-index="${index}">
+          <option value="">選択してください</option>
+          ${selectOptions}
+        </select>
+      </div>
+    `;
+    
+    container.appendChild(card);
   });
 }
 
-function execUpload() {
-  const sel = document.getElementById('upload-project-select');
-  if(!sel.value) return alert('案件を選択してください');
-  if(!uploadFile) return;
+/**
+ * アップロードファイルを削除
+ */
+function removeUploadedFile(index) {
+  uploadedFiles.splice(index, 1);
+  if (uploadedFiles.length === 0) {
+    document.getElementById('upload-preview').classList.add('hidden');
+    document.getElementById('upload-bulk-action-area').classList.add('hidden');
+    document.getElementById('file-input').value = '';
+  } else {
+    renderUploadedFiles();
+    updateUploadBulkCount();
+  }
+}
 
-  const parts = sel.value.split(':');
-  const projectInfo = {
-    type: parts[0],
-    id: parts[0]==='EXISTING'?parts[1]:null,
-    locCode: parts[0]==='NEW'?parts[1]:null,
-    eqId: parts[0]==='NEW'?parts[2]:null
-  };
+/**
+ * PCアップロード用の一括カウント更新
+ */
+function updateUploadBulkCount() {
+  const count = uploadedFiles.length;
+  const countElement = document.getElementById('upload-bulk-count');
+  const bulkArea = document.getElementById('upload-bulk-action-area');
+  
+  if (countElement) {
+    countElement.textContent = count;
+  }
+  
+  if (bulkArea) {
+    if (count > 0) {
+      bulkArea.classList.remove('hidden');
+    } else {
+      bulkArea.classList.add('hidden');
+    }
+  }
+}
 
+/**
+ * PCアップロード: 一括登録実行
+ */
+function execBulkUpload() {
+  if (uploadedFiles.length === 0) return;
+  
+  // 選択されていないファイルをチェック
+  let hasError = false;
+  uploadedFiles.forEach(function(fileData, index) {
+    const select = document.querySelector(`.upload-project-select[data-index="${index}"]`);
+    if (!select || !select.value) {
+      hasError = true;
+      select.classList.add('border-red-500');
+    } else {
+      select.classList.remove('border-red-500');
+    }
+  });
+  
+  if (hasError) {
+    alert('紐付け先が選択されていないファイルがあります');
+    return;
+  }
+  
+  if (!confirm(`${uploadedFiles.length}件のファイルを登録し、処理済フォルダに移動しますか？`)) return;
+  
+  console.log('📤 Executing bulk upload:', uploadedFiles.length, 'files');
   showLoading(true);
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const base64 = e.target.result.split(',')[1];
-    google.script.run.withSuccessHandler(res => {
-      showLoading(false);
-      alert('アップロードと登録が完了しました');
-      document.getElementById('upload-preview').classList.add('hidden');
-      uploadFile = null;
-    }).uploadAndImport(base64, uploadFile.name, uploadFile.type, projectInfo);
-  };
-  reader.readAsDataURL(uploadFile);
+  
+  let completed = 0;
+  let errors = [];
+  
+  uploadedFiles.forEach(function(fileData, index) {
+    const select = document.querySelector(`.upload-project-select[data-index="${index}"]`);
+    const val = select.value;
+    const parts = val.split(':');
+    
+    const projectInfo = {
+      type: parts[0],
+      id: parts[0] === 'EXISTING' ? parts[1] : null,
+      locCode: parts[0] === 'NEW' ? parts[1] : null,
+      eqId: parts[0] === 'NEW' ? parts[2] : null
+    };
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const base64 = e.target.result.split(',')[1];
+      
+      google.script.run
+        .withSuccessHandler(function(res) {
+          completed++;
+          console.log(`✅ Upload ${index + 1}/${uploadedFiles.length} completed`);
+          
+          if (completed === uploadedFiles.length) {
+            showLoading(false);
+            if (errors.length > 0) {
+              alert(`${completed}件処理完了\n⚠️ ${errors.length}件でエラーが発生しました`);
+            } else {
+              alert(`${completed}件のアップロードと登録が完了しました`);
+            }
+            
+            // リセット
+            uploadedFiles = [];
+            document.getElementById('upload-preview').classList.add('hidden');
+            document.getElementById('upload-bulk-action-area').classList.add('hidden');
+            document.getElementById('file-input').value = '';
+          }
+        })
+        .withFailureHandler(function(error) {
+          completed++;
+          errors.push(`${fileData.name}: ${error}`);
+          console.error(`❌ Upload ${index + 1} failed:`, error);
+          
+          if (completed === uploadedFiles.length) {
+            showLoading(false);
+            if (errors.length > 0) {
+              alert(`${completed}件処理完了\n⚠️ ${errors.length}件でエラーが発生しました`);
+            } else {
+              alert(`${completed}件のアップロードと登録が完了しました`);
+            }
+            
+            uploadedFiles = [];
+            document.getElementById('upload-preview').classList.add('hidden');
+            document.getElementById('upload-bulk-action-area').classList.add('hidden');
+            document.getElementById('file-input').value = '';
+          }
+        })
+        .uploadAndImport(base64, fileData.name, fileData.file.type, projectInfo);
+    };
+    
+    reader.onerror = function() {
+      completed++;
+      errors.push(`${fileData.name}: ファイル読み込みエラー`);
+      
+      if (completed === uploadedFiles.length) {
+        showLoading(false);
+        alert(`${completed}件処理完了\n⚠️ ${errors.length}件でエラーが発生しました`);
+        
+        uploadedFiles = [];
+        document.getElementById('upload-preview').classList.add('hidden');
+        document.getElementById('upload-bulk-action-area').classList.add('hidden');
+        document.getElementById('file-input').value = '';
+      }
+    };
+    
+    reader.readAsDataURL(fileData.file);
+  });
+}
+
+// ページ読み込み時に初期化
+console.log('🔄 Page loaded, initializing...');
+if (typeof importInit === 'function') {
+  importInit();
+} else {
+  console.error('❌ importInit function not found');
 }
 </script>
