@@ -32,15 +32,12 @@
   <div class="bg-white rounded-lg shadow border overflow-hidden">
     <div class="bg-gray-50 p-4 border-b">
       <h3 class="font-bold text-gray-800"><i class="fas fa-file-invoice-dollar mr-2"></i>見積り比較（外部DB参照）</h3>
-      <p class="text-xs text-gray-600 mt-1">設備カテゴリごとの見積り一覧を表示します。</p>
+      <p class="text-xs text-gray-600 mt-1">進行中案件の設備・作業内容を選ぶと、同じ種類の見積り一覧（最安・最高・平均・PDF）を表示します。</p>
     </div>
     <div class="p-4 flex flex-wrap items-center gap-3">
-      <label class="text-sm font-bold text-gray-700">設備カテゴリ</label>
-      <select id="estimate-category-select" class="border rounded p-2 text-sm">
-        <option value="計量機">計量機</option>
-        <option value="洗車機">洗車機</option>
-        <option value="空調設備">空調設備</option>
-        <option value="その他">その他</option>
+      <label class="text-sm font-bold text-gray-700">対象設備・作業</label>
+      <select id="estimate-category-select" class="border rounded p-2 text-sm min-w-[200px]">
+        <option value="">— 選択してください —</option>
       </select>
       <button onclick="showEstimateComparison(document.getElementById('estimate-category-select').value)" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 shadow">
         <i class="fas fa-search mr-1"></i>見積り比較を表示
@@ -96,8 +93,29 @@ function progressInit(f=false) {
   google.script.run.withSuccessHandler(r => { 
     window.g_cache.progress=r; 
     renderStatusBars(r); 
+    loadEstimateCategoriesFromProjects(r);
     showLoading(false);
   }).getAllActiveProjects();
+}
+
+/** 進行中案件から見積り比較用の「対象設備・作業」ドロップダウンを生成 */
+function loadEstimateCategoriesFromProjects(projects) {
+  var sel = document.getElementById('estimate-category-select');
+  if (!sel) return;
+  var seen = {};
+  var list = [];
+  (projects || []).forEach(function(p) {
+    var label = (p.equipmentName || p.workType || p.equipmentId || '').toString().trim();
+    if (label && !seen[label]) { seen[label] = true; list.push(label); }
+  });
+  list.sort();
+  sel.innerHTML = '<option value="">— 選択してください —</option>';
+  list.forEach(function(label) {
+    var opt = document.createElement('option');
+    opt.value = label;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  });
 }
 
 function renderStatusBars(projects) {
@@ -188,7 +206,10 @@ function submitSchedule() {
 }
 
 function showEstimateComparison(category) {
-  if (!category) return;
+  if (!category || !String(category).trim()) {
+    alert('対象の設備・作業を選んでください。');
+    return;
+  }
   showLoading(true);
   google.script.run
     .withSuccessHandler(function(data) {

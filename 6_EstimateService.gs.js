@@ -7,12 +7,16 @@ var ESTIMATE_DB_ID = '17FKM50xNHEcftYmZ2u1O2VrAtPKnKm5E5dG1tnIR6fo';
 var ESTIMATE_SHEET_NAME = '見積りDB';
 
 /**
- * 見積りDBから設備カテゴリで検索
- * @param {string} category - 設備カテゴリ（例: 計量機, 洗車機, 空調設備）
+ * 見積りDBから設備カテゴリで検索（部分一致）
+ * 案件化している設備名・作業内容とDBの「設備カテゴリ」を部分一致で照合
+ * @param {string} category - 設備名・作業内容（例: ガソリン計量機, 灯油計量機, 塗装, エコステージ）
  * @return {Array} 該当する見積り一覧
  */
 function searchEstimatesByCategory(category) {
   try {
+    if (!category || String(category).trim() === '') {
+      return [];
+    }
     var ss = SpreadsheetApp.openById(ESTIMATE_DB_ID);
     var sheet = ss.getSheetByName(ESTIMATE_SHEET_NAME);
 
@@ -22,10 +26,14 @@ function searchEstimatesByCategory(category) {
 
     var data = sheet.getDataRange().getValues();
     var results = [];
+    var cat = String(category).trim();
 
     for (var i = 1; i < data.length; i++) {
       var row = data[i];
-      if (row[3] === category) {  // 設備カテゴリ列
+      var dbCategory = String(row[3] || '').trim();  // 設備カテゴリ列
+      // 部分一致: DBのカテゴリに選択値が含まれる、または選択値にDBのカテゴリが含まれる
+      var match = dbCategory.indexOf(cat) >= 0 || cat.indexOf(dbCategory) >= 0;
+      if (match) {
         results.push({
           registeredAt: row[0],
           estimateDate: row[1],
