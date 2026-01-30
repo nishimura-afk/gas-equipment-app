@@ -226,39 +226,9 @@ function debugFolderAccess() {
 
 /**
  * 抽出データの構造確認
+ * （見積り機能は別システムに移管したため、このテストは無効化）
  */
 function debugExtractedData() {
-  Logger.log('=== 抽出データ構造の確認 ===');
-  
-  // PDFファイル取得
-  const folderInfo = ensureInboxFolder();
-  const folder = DriveApp.getFolderById(folderInfo.id);
-  const pdfFiles = folder.getFilesByType(MimeType.PDF);
-  
-  if (!pdfFiles.hasNext()) {
-    Logger.log('❌ PDFファイルがありません');
-    return;
-  }
-  
-  const testFile = pdfFiles.next();
-  Logger.log('テストファイル: ' + testFile.getName());
-  
-  // PDF抽出
-  const extractedData = extractEstimateFromPDF(testFile.getId(), testFile.getName());
-  
-  // データの中身を全て表示
-  Logger.log('\n【抽出データの内容】');
-  Logger.log(JSON.stringify(extractedData, null, 2));
-  
-  // 各プロパティを個別に確認
-  Logger.log('\n【プロパティ確認】');
-  Logger.log('typeof extractedData: ' + typeof extractedData);
-  
-  if (extractedData) {
-    Logger.log('プロパティ一覧: ' + Object.keys(extractedData).join(', '));
-    
-    for (let key in extractedData) {
-      Logger.log(key + ' = ' + extractedData[key]);
-    }
-  }
+  Logger.log('=== 見積りPDF抽出機能は設備管理システムから削除されました ===');
+  Logger.log('見積りの分類・管理は別システム（分類リネームGAS）で行います。');
 }
