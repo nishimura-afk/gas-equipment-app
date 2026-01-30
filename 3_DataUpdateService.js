@@ -25,11 +25,19 @@ function logSystemAction(actionType, detail, status) {
 }
 
 function recordExchangeComplete(locationCode, equipmentId, workType, workDate, subsidyInfo) {
+  logInfo('recordExchangeComplete開始: ' + locationCode + ' / ' + equipmentId + ' / ' + workType);
+
   const config = getConfig();
   const masterSheet = getSheet(config.SHEET_NAMES.MASTER_EQUIPMENT);
   const masterData = masterSheet.getDataRange().getValues();
   const rowIndex = masterData.findIndex(row => row[0] == locationCode && row[2] == equipmentId);
-  if (rowIndex === -1) throw new Error('マスタに対象の設備が見つかりません');
+
+  if (rowIndex === -1) {
+    logError('マスタに設備が見つかりません: ' + locationCode + ' / ' + equipmentId);
+    throw new Error('マスタに対象の設備が見つかりません');
+  }
+
+  logInfo('マスタ行発見: rowIndex=' + rowIndex);
  
   const headers = masterData[0];
   const rowRange = masterSheet.getRange(rowIndex + 1, 1, 1, headers.length);
@@ -65,9 +73,16 @@ function recordExchangeComplete(locationCode, equipmentId, workType, workDate, s
     }
   }
 
+  // 履歴シートに記録
+  logInfo('履歴シートに記録: ' + workDate);
   getSheet(config.SHEET_NAMES.HISTORY).appendRow([locationCode, equipmentId, workType, workDate, subsidyInfo || '-', '']);
+
+  // ステータス集計を更新
+  logInfo('updateWebData開始');
   updateWebData();
+
   logSystemAction('UPDATE', `${locationCode}:${equipmentId} - ${workType}`);
+  logInfo('recordExchangeComplete完了');
   return { success: true };
 }
 
