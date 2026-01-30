@@ -1,9 +1,12 @@
 /**
- * Code.gs v7.5
+ * Code.gs v8.0
  * 本番運用版
+ * - 標準レスポンス形式対応
+ * - 共通ユーティリティ関数使用
+ * - 列インデックス定数使用
  */
 function doGet() {
-  console.log('doGet START v7.4');
+  logDebug('doGet START v8.0');
   const t = HtmlService.createTemplateFromFile('index');
   t.include = function(f) { return HtmlService.createHtmlOutputFromFile(f).getContent(); };
   return t.evaluate()
@@ -34,25 +37,9 @@ function getDashboardData() {
     .map(row => `${row[1]}_${row[2]}`);
 
   // 本体更新が案件化されている拠点を抽出（定期部品交換の除外用）
-  const gasBodyReplacementLocations = new Set();
-  const keroseneBodyReplacementLocations = new Set();
-  
-  scheduleData.slice(1).forEach(row => {
-    if (row[5] !== config.PROJECT_STATUS.COMPLETED && row[5] !== config.PROJECT_STATUS.CANCELLED) {
-      const locCode = row[1];
-      const eqId = row[2];
-      
-      // ガソリン計量機本体更新
-      if (eqId && (eqId.includes('PUMP-G-01') || eqId === 'REPLACE_GAS_PUMP')) {
-        gasBodyReplacementLocations.add(locCode);
-      }
-      
-      // 灯油計量機更新
-      if (eqId && (eqId.includes('PUMP-K-01') || eqId === 'REPLACE_KEROSENE_PUMP')) {
-        keroseneBodyReplacementLocations.add(locCode);
-      }
-    }
-  });
+  const bodyReplacements = getBodyReplacementLocations(scheduleData, config);
+  const gasBodyReplacementLocations = bodyReplacements.gasLocations;
+  const keroseneBodyReplacementLocations = bodyReplacements.keroseneLocations;
 
   const notices = data.filter(m => {
     const equipmentKey = `${m['拠点コード']}_${m['設備ID']}`;
@@ -88,10 +75,7 @@ function getAllActiveProjects() {
   const config = getConfig();
   const data = getSheet(config.SHEET_NAMES.SCHEDULE).getDataRange().getValues();
   if (data.length <= 1) return [];
-  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-  const locData = locSheet.getDataRange().getValues();
-  const locMap = {};
-  locData.slice(1).forEach(r => { if(r[0]) locMap[r[0]] = r[1]; });
+  const locMap = buildLocationMap();
   const equipmentList = getEquipmentListCached();
   const eqMap = {};
   equipmentList.forEach(row => {
@@ -128,21 +112,24 @@ function updateProjectStatus(id, newStatus) {
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
-      sheet.getRange(i + 1, 6).setValue(newStatus);
-      return { success: true };
+      sheet.getRange(i + 1, SCHEDULE_COLUMNS.STATUS).setValue(newStatus);
+      return successResponse({ id: id, newStatus: newStatus });
     }
   }
+  return errorResponse('指定されたIDが見つかりません');
 }
 
 function cancelProject(id) {
-  const sheet = getSheet(getConfig().SHEET_NAMES.SCHEDULE);
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.SCHEDULE);
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(id)) {
-      sheet.getRange(i + 1, 6).setValue(getConfig().PROJECT_STATUS.CANCELLED);
-      return { success: true };
+      sheet.getRange(i + 1, SCHEDULE_COLUMNS.STATUS).setValue(config.PROJECT_STATUS.CANCELLED);
+      return successResponse({ id: id, status: config.PROJECT_STATUS.CANCELLED });
     }
   }
+  return errorResponse('指定されたIDが見つかりません');
 }
 
 function createScheduleAndRecord(loc, eq, work, date, notes, existingId = null) {
@@ -315,25 +302,9 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
   // 案件管理シートから本体更新が案件化されている拠点を取得
   var scheduleSheet = ss.getSheetByName(config.SHEET_NAMES.SCHEDULE);
   var scheduleData = scheduleSheet.getDataRange().getValues();
-  var gasBodyReplacementLocations = new Set();
-  var keroseneBodyReplacementLocations = new Set();
-  
-  scheduleData.slice(1).forEach(function(row) {
-    if (row[5] !== config.PROJECT_STATUS.COMPLETED && row[5] !== config.PROJECT_STATUS.CANCELLED) {
-      var locCode = row[1];
-      var eqId = row[2];
-      
-      // ガソリン計量機本体更新
-      if (eqId && (eqId.indexOf('PUMP-G-01') >= 0 || eqId === 'REPLACE_GAS_PUMP')) {
-        gasBodyReplacementLocations.add(locCode);
-      }
-      
-      // 灯油計量機更新
-      if (eqId && (eqId.indexOf('PUMP-K-01') >= 0 || eqId === 'REPLACE_KEROSENE_PUMP')) {
-        keroseneBodyReplacementLocations.add(locCode);
-      }
-    }
-  });
+  var bodyReplacements = getBodyReplacementLocations(scheduleData, config);
+  var gasBodyReplacementLocations = bodyReplacements.gasLocations;
+  var keroseneBodyReplacementLocations = bodyReplacements.keroseneLocations;
   
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
@@ -474,9 +445,9 @@ function createIndividualGmailDraft(locCode, eqId, locName, eqName, workType) {
     body += '--------------------------------------------------';
     
     GmailApp.createDraft('', subject, body, {
-      from: 'nishimura@selfix.jp'
+      from: getConfig().ADMIN_MAIL
     });
-    
+
     return { success: true };
   } catch (e) {
     throw new Error('Gmail下書き作成エラー: ' + e.message);
@@ -542,9 +513,9 @@ function createBulkOrderGmailDraft(equipmentId) {
       body += '--------------------------------------------------';
       
       GmailApp.createDraft('', subject, body, {
-        from: 'nishimura@selfix.jp'
+        from: getConfig().ADMIN_MAIL
       });
-      
+
       return {
         success: true,
         message: 'Gmail下書きを作成しました',
@@ -581,9 +552,9 @@ function createBulkOrderGmailDraft(equipmentId) {
     body += '--------------------------------------------------';
     
     GmailApp.createDraft('', subject, body, {
-      from: 'nishimura@selfix.jp'
+      from: getConfig().ADMIN_MAIL
     });
-    
+
     return {
       success: true,
       message: 'Gmail下書きを作成しました',

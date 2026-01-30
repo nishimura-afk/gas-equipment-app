@@ -1,14 +1,23 @@
 /**
- * 5_DriveService.gs v5.7
+ * 5_DriveService.js v6.0
  * ID生成にUUIDを採用
+ * PropertiesService対応
  */
-const USER_DRIVE_ID = '1gUD2Z2N2-APYFXQcugu1fdex_YfoiyA2';
-const INBOX_FOLDER_NAME = 'SS見積_受信BOX'; 
+
+/**
+ * ユーザーDrive IDを取得（PropertiesService経由）
+ * @returns {string} Drive ID
+ */
+function getUserDriveId() {
+  return getScriptProperty('USER_DRIVE_ID', '1gUD2Z2N2-APYFXQcugu1fdex_YfoiyA2');
+}
+
+const INBOX_FOLDER_NAME = 'SS見積_受信BOX';
 const ARCHIVE_FOLDER_NAME = 'SS見積_処理済';
 
 function ensureInboxFolder() {
-  // USER_DRIVE_IDが既に受信BOXフォルダ自体を指している
-  const inboxFolder = DriveApp.getFolderById(USER_DRIVE_ID);
+  // getUserDriveId()が既に受信BOXフォルダ自体を指している
+  const inboxFolder = DriveApp.getFolderById(getUserDriveId());
   
   // 処理済フォルダは親フォルダ内に作成（02_見積り内）
   const parentFolders = inboxFolder.getParents();
@@ -187,7 +196,7 @@ function executeImport(filesToImport) {
   
   let rootFolder;
   try { 
-    rootFolder = DriveApp.getFolderById(USER_DRIVE_ID); 
+    rootFolder = DriveApp.getFolderById(getUserDriveId()); 
   } catch(e) { 
     rootFolder = DriveApp.getRootFolder(); 
   }

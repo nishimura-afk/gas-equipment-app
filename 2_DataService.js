@@ -1,6 +1,8 @@
 /**
- * 2_DataService.gs v4.7
+ * 2_DataService.gs v5.0
  * データの取得に特化
+ * - 共通ユーティリティ関数使用
+ * - 関数分割による可読性向上
  */
 function getEquipmentMasterData() {
   return getEquipmentListCached();
@@ -100,152 +102,184 @@ function parseDateValue(value) {
  * ステータス集計シートを更新（完全版）
  */
 function updateWebData() {
-  Logger.log('ステータス集計を更新します...');
-  
+  logInfo('ステータス集計を更新します...');
+
   try {
     const config = getConfig();
-    const masterSheet = getSheet(config.SHEET_NAMES.MASTER_EQUIPMENT);
-    const statusSheet = getSheet(config.SHEET_NAMES.STATUS_SUMMARY);
-    const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-    
-    // 各シートのデータを取得
-    const masterData = masterSheet.getDataRange().getValues();
-    const masterHeaders = masterData[0];
-    
-    Logger.log('マスタ行数: ' + (masterData.length - 1) + '件');
-    
-    // 拠点マスタから拠点名マップを作成
-    const locData = locSheet.getDataRange().getValues();
-    const locMap = {};
-    for (let i = 1; i < locData.length; i++) {
-      if (locData[i][0]) {
-        locMap[locData[i][0]] = locData[i][1];
-      }
-    }
-    
-    // 設備マスタの列インデックスマップを作成
-    const masterColIdx = {};
-    masterHeaders.forEach((header, idx) => {
-      masterColIdx[header] = idx;
-    });
-    
-    // ステータス集計用の新しいデータ配列
-    const newData = [];
-    const today = new Date();
-    
-    // 設備マスタの各行を処理
-    for (let i = 1; i < masterData.length; i++) {
-      const row = masterData[i];
-      
-      try {
-        // 基本情報を取得
-        const locCode = row[masterColIdx['拠点コード']];
-        const eqId = row[masterColIdx['設備ID']];
-        
-        // 空行をスキップ
-        if (!locCode || !eqId) {
-          continue;
-        }
-        
-        const locName = locMap[locCode] || locCode;
-        const eqName = row[masterColIdx['設備名']] || '';
-        const spec = row[masterColIdx['型式・仕様']] || '';
-        const installDate = row[masterColIdx['設置日(前回実施)']];
-        const partADate = row[masterColIdx['部品A交換日']];
-        const partBDate = row[masterColIdx['部品B最終交換日']];
-        const nextWorkMemo = row[masterColIdx['次回作業メモ']] || '';
-        
-        // メンテナンスサイクルを特定
-        const cycle = findCycleByEquipmentId(eqId, eqName, config.MAINTENANCE_CYCLES);
-        
-        if (!cycle) {
-          Logger.log(`警告: ${locCode} - ${eqId}(${eqName}) のサイクルが見つかりません`);
-          continue;
-        }
-        
-        // ステータスを計算
-        const bodyStatus = calculateBodyStatus(installDate, cycle, today, config.STATUS);
-        const partAStatus = calculatePartAStatus(partADate || installDate, cycle, today, config.STATUS);
-        
-        // 部品B: 本体更新かつ交換日が実際に記録されている場合のみ計算
-        let partBStatus = config.STATUS.NORMAL;
-        if (cycle.category === '本体更新' && partBDate && partBDate instanceof Date && !isNaN(partBDate.getTime())) {
-          partBStatus = calculatePartBStatus(partBDate, cycle, today, config.STATUS);
-        }
-        
-        // 次回予定日を計算
-        const nextDate = calculateNextDate(installDate, partADate, cycle);
-        
-        // 部品B対象かどうか判定
-        const hasPartB = (cycle.category === '本体更新' && partBDate) ? '対象' : '';
-        
-        // monthDiffAを計算（部品Aの経過月数）
-        // 部材更新カテゴリのみ必要
-        let monthDiffA = '';
-        if (cycle.category === '部材更新') {
-          // 部品A交換日がある場合はそれを使用、なければ設置日を使用
-          const baseDate = (partADate && partADate instanceof Date && !isNaN(partADate.getTime())) 
-            ? partADate 
-            : installDate;
-          
-          if (baseDate && baseDate instanceof Date && !isNaN(baseDate.getTime())) {
-            monthDiffA = Math.floor(getYearsDiff(baseDate, today) * 12);
-          }
-        }
-        
-        // subsidyAlertの計算（必要に応じて）
-        const subsidyAlert = '';
-        
-        // ステータス集計シートの列順に合わせて行データを作成
-        // 列順: 拠点コード, 拠点名, 設備ID, 設備名, カテゴリ, 設置日, 部品Aステータス, 部品Bステータス, 
-        //       本体ステータス, 部品B対象, monthDiffA, subsidyAlert, nextWorkMemo, spec, 次回予定日
-        const newRow = [
-          locCode,                    // 1. 拠点コード
-          locName,                    // 2. 拠点名
-          eqId,                       // 3. 設備ID
-          eqName,                     // 4. 設備名
-          cycle.category || '',       // 5. カテゴリ
-          installDate,                // 6. 設置日(前回実施)
-          partAStatus,                // 7. 部品Aステータス
-          partBStatus,                // 8. 部品Bステータス
-          bodyStatus,                 // 9. 本体ステータス
-          hasPartB,                   // 10. 部品B対象
-          monthDiffA,                 // 11. monthDiffA
-          subsidyAlert,               // 12. subsidyAlert
-          nextWorkMemo,               // 13. nextWorkMemo
-          spec,                       // 14. spec
-          nextDate                    // 15. 次回予定日
-        ];
-        
-        newData.push(newRow);
-        
-      } catch (e) {
-        Logger.log(`エラー: 行${i+1}の処理中: ${e.message}`);
-      }
-    }
-    
-    Logger.log('データ処理完了: ' + newData.length + '件');
-    
-    // ステータス集計シートをクリアして新しいデータを書き込み
-    const lastRow = statusSheet.getLastRow();
-    if (lastRow > 1) {
-      statusSheet.getRange(2, 1, lastRow - 1, statusSheet.getLastColumn()).clearContent();
-      Logger.log('既存データをクリア: ' + (lastRow - 1) + '行');
-    }
-    
-    if (newData.length > 0) {
-      statusSheet.getRange(2, 1, newData.length, 15).setValues(newData);
-      Logger.log(`✅ ステータス集計シートに${newData.length}件のデータを書き込みました`);
-    } else {
-      Logger.log('⚠️ 書き込むデータがありません');
-    }
-    
-    Logger.log('updateWebData完了');
-    
+    const masterData = loadMasterData(config);
+    const locMap = buildLocationMap();
+    const newData = processMasterRows(masterData, locMap, config);
+
+    logInfo('データ処理完了: ' + newData.length + '件');
+
+    writeStatusSummary(config, newData);
+
+    logInfo('updateWebData完了');
+
   } catch (e) {
-    Logger.log('❌ エラー: ' + e.message);
-    Logger.log(e.stack);
+    logError('updateWebData失敗: ' + e.message);
+    logError(e.stack);
     throw e;
+  }
+}
+
+/**
+ * マスタデータを読み込む
+ * @param {Object} config - 設定オブジェクト
+ * @returns {Object} マスタデータとヘッダー情報
+ */
+function loadMasterData(config) {
+  const masterSheet = getSheet(config.SHEET_NAMES.MASTER_EQUIPMENT);
+  const masterData = masterSheet.getDataRange().getValues();
+  const masterHeaders = masterData[0];
+
+  logInfo('マスタ行数: ' + (masterData.length - 1) + '件');
+
+  // 設備マスタの列インデックスマップを作成
+  const masterColIdx = {};
+  masterHeaders.forEach(function(header, idx) {
+    masterColIdx[header] = idx;
+  });
+
+  return {
+    data: masterData,
+    headers: masterHeaders,
+    colIdx: masterColIdx
+  };
+}
+
+/**
+ * マスタの各行を処理してステータスデータを生成
+ * @param {Object} masterData - マスタデータオブジェクト
+ * @param {Object} locMap - 拠点マップ
+ * @param {Object} config - 設定オブジェクト
+ * @returns {Array} ステータス集計用データ配列
+ */
+function processMasterRows(masterData, locMap, config) {
+  const newData = [];
+  const today = new Date();
+  const colIdx = masterData.colIdx;
+
+  for (let i = 1; i < masterData.data.length; i++) {
+    const row = masterData.data[i];
+
+    try {
+      const rowData = processEquipmentRow(row, colIdx, locMap, config, today);
+      if (rowData) {
+        newData.push(rowData);
+      }
+    } catch (e) {
+      logWarn('行' + (i + 1) + 'の処理中にエラー: ' + e.message);
+    }
+  }
+
+  return newData;
+}
+
+/**
+ * 設備行を処理してステータス行データを生成
+ * @param {Array} row - 設備マスタの行データ
+ * @param {Object} colIdx - 列インデックスマップ
+ * @param {Object} locMap - 拠点マップ
+ * @param {Object} config - 設定オブジェクト
+ * @param {Date} today - 今日の日付
+ * @returns {Array|null} ステータス行データ（スキップ時はnull）
+ */
+function processEquipmentRow(row, colIdx, locMap, config, today) {
+  const locCode = row[colIdx['拠点コード']];
+  const eqId = row[colIdx['設備ID']];
+
+  // 空行をスキップ
+  if (!locCode || !eqId) {
+    return null;
+  }
+
+  const locName = locMap[locCode] || locCode;
+  const eqName = row[colIdx['設備名']] || '';
+  const spec = row[colIdx['型式・仕様']] || '';
+  const installDate = row[colIdx['設置日(前回実施)']];
+  const partADate = row[colIdx['部品A交換日']];
+  const partBDate = row[colIdx['部品B最終交換日']];
+  const nextWorkMemo = row[colIdx['次回作業メモ']] || '';
+
+  // メンテナンスサイクルを特定
+  const cycle = findCycleByEquipmentId(eqId, eqName, config.MAINTENANCE_CYCLES);
+
+  if (!cycle) {
+    logWarn(locCode + ' - ' + eqId + '(' + eqName + ') のサイクルが見つかりません');
+    return null;
+  }
+
+  // ステータスを計算
+  const bodyStatus = calculateBodyStatus(installDate, cycle, today, config.STATUS);
+  const partAStatus = calculatePartAStatus(partADate || installDate, cycle, today, config.STATUS);
+
+  // 部品B: 本体更新かつ交換日が実際に記録されている場合のみ計算
+  let partBStatus = config.STATUS.NORMAL;
+  if (cycle.category === '本体更新' && partBDate && partBDate instanceof Date && !isNaN(partBDate.getTime())) {
+    partBStatus = calculatePartBStatus(partBDate, cycle, today, config.STATUS);
+  }
+
+  // 次回予定日を計算
+  const nextDate = calculateNextDate(installDate, partADate, cycle);
+
+  // 部品B対象かどうか判定
+  const hasPartB = (cycle.category === '本体更新' && partBDate) ? '対象' : '';
+
+  // monthDiffAを計算（部品Aの経過月数）
+  let monthDiffA = '';
+  if (cycle.category === '部材更新') {
+    const baseDate = (partADate && partADate instanceof Date && !isNaN(partADate.getTime()))
+      ? partADate
+      : installDate;
+
+    if (baseDate && baseDate instanceof Date && !isNaN(baseDate.getTime())) {
+      monthDiffA = Math.floor(getYearsDiff(baseDate, today) * 12);
+    }
+  }
+
+  // 列順: 拠点コード, 拠点名, 設備ID, 設備名, カテゴリ, 設置日, 部品Aステータス, 部品Bステータス,
+  //       本体ステータス, 部品B対象, monthDiffA, subsidyAlert, nextWorkMemo, spec, 次回予定日
+  return [
+    locCode,
+    locName,
+    eqId,
+    eqName,
+    cycle.category || '',
+    installDate,
+    partAStatus,
+    partBStatus,
+    bodyStatus,
+    hasPartB,
+    monthDiffA,
+    '',  // subsidyAlert
+    nextWorkMemo,
+    spec,
+    nextDate
+  ];
+}
+
+/**
+ * ステータス集計シートにデータを書き込む
+ * @param {Object} config - 設定オブジェクト
+ * @param {Array} newData - 書き込むデータ配列
+ */
+function writeStatusSummary(config, newData) {
+  const statusSheet = getSheet(config.SHEET_NAMES.STATUS_SUMMARY);
+
+  // 既存データをクリア
+  const lastRow = statusSheet.getLastRow();
+  if (lastRow > 1) {
+    statusSheet.getRange(2, 1, lastRow - 1, statusSheet.getLastColumn()).clearContent();
+    logDebug('既存データをクリア: ' + (lastRow - 1) + '行');
+  }
+
+  // 新しいデータを書き込み
+  if (newData.length > 0) {
+    statusSheet.getRange(2, 1, newData.length, 15).setValues(newData);
+    logInfo('ステータス集計シートに' + newData.length + '件のデータを書き込みました');
+  } else {
+    logWarn('書き込むデータがありません');
   }
 }
 

@@ -1,15 +1,56 @@
 /**
- * 0_Config.gs v6.1
+ * 0_Config.gs v7.0
  * 設定一元管理版
  * - ベンダー情報（メールアドレス含む）を集約
  * - アラート閾値を定義
  * - 釣銭機カバーをseasonal: falseに修正
+ * - PropertiesService対応（機密情報の外部化）
+ * - 設定キャッシュ機能
  */
+
+// ========================================
+// 設定キャッシュ
+// ========================================
+let _configCache = null;
+let _ssCache = null;
+
+/**
+ * 設定キャッシュをクリア（設定変更時に呼び出し）
+ */
+function clearConfigCache() {
+  _configCache = null;
+  _ssCache = null;
+}
+
+/**
+ * スプレッドシートオブジェクトをキャッシュ付きで取得
+ * @returns {Spreadsheet} スプレッドシートオブジェクト
+ */
+function getSpreadsheet() {
+  if (_ssCache) return _ssCache;
+
+  try {
+    _ssCache = SpreadsheetApp.getActiveSpreadsheet();
+  } catch (e) {
+    // Activeが取得できない場合はIDで開く（トリガー実行時など）
+  }
+
+  if (!_ssCache) {
+    // 循環依存を避けるため、直接PropertiesServiceから取得
+    const spreadsheetId = getScriptProperty('SPREADSHEET_ID', '1FKMS0xNHEcftYmZ2u1Q2VrAtPKnKm5E5dG1tnlR6fo');
+    _ssCache = SpreadsheetApp.openById(spreadsheetId);
+  }
+  return _ssCache;
+}
+
 function getConfig() {
-  const SPREADSHEET_ID = '1FKMS0xNHEcftYmZ2u1Q2VrAtPKnKm5E5dG1tnlR6fo';
-  
+  if (_configCache) return _configCache;
+
+  // PropertiesServiceから取得（未設定時はデフォルト値を使用）
+  const SPREADSHEET_ID = getScriptProperty('SPREADSHEET_ID', '1FKMS0xNHEcftYmZ2u1Q2VrAtPKnKm5E5dG1tnlR6fo');
+
   // システム管理者（エラー通知やCC用）
-  const ADMIN_MAIL = 'nishimura@selfix.jp'; 
+  const ADMIN_MAIL = getScriptProperty('ADMIN_MAIL', 'nishimura@selfix.jp'); 
  
 const SHEET_NAMES = {
   MASTER_EQUIPMENT: '設備マスタ',
@@ -461,14 +502,13 @@ const SHEET_NAMES = {
   const PROJECT_STATUS = { ESTIMATE_REQ: '見積依頼中', ESTIMATE_RCV: '見積受領', ORDERED: '発注済', SCHEDULED: '日程確定', COMPLETED: '完了', CANCELLED: '取り消し' };
   const CALENDAR_ID = 'primary';
 
-  return { SPREADSHEET_ID, SHEET_NAMES, MAINTENANCE_CYCLES, STATUS, PROJECT_STATUS, CALENDAR_ID, ADMIN_MAIL, VENDORS };
+  // キャッシュに保存して返す
+  _configCache = { SPREADSHEET_ID, SHEET_NAMES, MAINTENANCE_CYCLES, STATUS, PROJECT_STATUS, CALENDAR_ID, ADMIN_MAIL, VENDORS };
+  return _configCache;
 }
 
 function getSheet(sheetName) {
-  const config = getConfig();
-  let ss;
-  try { ss = SpreadsheetApp.getActiveSpreadsheet(); } catch (e) {}
-  if (!ss) ss = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+  const ss = getSpreadsheet();
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) throw new Error(`シート "${sheetName}" が見つかりません。`);
   return sheet;

@@ -1,15 +1,27 @@
 /**
- * 3_DataUpdateService.gs v6.0
+ * 3_DataUpdateService.gs v7.0
  * ベンダー自動振り分け・メール下書き作成
  * - Configからベンダー情報を取得し、Toアドレスを設定
  * - UUID使用
+ * - エラーハンドリング改善
  */
-function logSystemAction(actionType, detail, status = 'SUCCESS') {
+
+/**
+ * システムアクションをログに記録
+ * @param {string} actionType - アクション種別
+ * @param {string} detail - 詳細情報
+ * @param {string} status - ステータス（デフォルト: SUCCESS）
+ */
+function logSystemAction(actionType, detail, status) {
+  if (status === undefined) status = 'SUCCESS';
   try {
     const config = getConfig();
     const sheet = getSheet(config.SHEET_NAMES.SYS_LOG);
     sheet.appendRow([new Date(), Session.getActiveUser().getEmail(), actionType, detail, status]);
-  } catch (e) {}
+  } catch (e) {
+    // ログに失敗しても本処理は継続
+    logError('logSystemAction failed: ' + e.message);
+  }
 }
 
 function recordExchangeComplete(locationCode, equipmentId, workType, workDate, subsidyInfo) {
@@ -65,10 +77,18 @@ function saveNextWorkMemo(shopCode, machineId, memo, spec) {
 }
 
 function createVendorBatchDrafts() {
-  const config = getConfig();
-  const notices = getDashboardData().noticeList;
-  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
-  if (notices.length === 0) return { message: 'アラート対象はありません。' };
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(30000);
+  } catch (e) {
+    return errorResponse('他の処理が実行中です。しばらく待ってから再試行してください。');
+  }
+
+  try {
+    const config = getConfig();
+    const notices = getDashboardData().noticeList;
+    const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+    if (notices.length === 0) return { message: 'アラート対象はありません。' };
 
   const vendors = config.VENDORS;
   for (const key in vendors) { vendors[key].items = []; }
@@ -155,11 +175,14 @@ function createVendorBatchDrafts() {
     body += `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
 
     GmailApp.createDraft(v.email || '', subject, body, {
-      from: 'nishimura@selfix.jp'
+      from: getConfig().ADMIN_MAIL
     });
     log.push(v.name);
   }
   return { message: `${log.join(', ')} の下書きを作成しました。` };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function createAlertDrafts() {
@@ -187,7 +210,7 @@ function createAlertDrafts() {
                  `--------------------------------------------------\n日商有田株式会社\n西村\n--------------------------------------------------`;
     
     GmailApp.createDraft('', subject, body, {
-      from: 'nishimura@selfix.jp'
+      from: getConfig().ADMIN_MAIL
     });
     const uniqueId = Utilities.getUuid();
     scheduleSheet.appendRow([uniqueId, item['拠点コード'], item['設備ID'], workType, '', config.PROJECT_STATUS.ESTIMATE_REQ, '', '']);
@@ -200,7 +223,7 @@ function createSingleDraftAndProject(locName, locCode, eqName, eqId, workType, b
   const config = getConfig();
   const subject = `【見積依頼】見積り依頼の件`;
   GmailApp.createDraft('', subject, body, {
-    from: 'nishimura@selfix.jp'
+    from: getConfig().ADMIN_MAIL
   });
   
   const uniqueId = Utilities.getUuid();
@@ -261,7 +284,7 @@ function createIndividualDraftAndProject(locCode, locName, eqId, eqName, workTyp
   
   // Gmail下書き作成
   GmailApp.createDraft('', subject, body, {
-    from: 'nishimura@selfix.jp'
+    from: getConfig().ADMIN_MAIL
   });
   
   // 案件シートに登録
@@ -356,7 +379,7 @@ function createVendorDraftForSelected(vendorKey, selectedItemIds) {
   
   // Gmail下書き作成
   GmailApp.createDraft(vendor.email || '', subject, body, {
-    from: 'nishimura@selfix.jp'
+    from: getConfig().ADMIN_MAIL
   });
   
   // 案件シートに登録
@@ -403,7 +426,7 @@ function createMultipleVendorDrafts(vendorGroups) {
  */
 function createCustomGmailDraft(to, subject, body) {
   GmailApp.createDraft(to, subject, body, {
-    from: 'nishimura@selfix.jp'
+    from: getConfig().ADMIN_MAIL
   });
   
   return { success: true, message: 'Gmail下書きを作成しました' };
