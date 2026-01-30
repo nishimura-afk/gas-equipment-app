@@ -250,23 +250,7 @@ function executeImport(filesToImport) {
         }
       }
       
-      // 見積リンクを記録（軽量処理）
-      const fileInfo = {
-        id: file.getId(),
-        name: originalName,
-        url: file.getUrl()
-      };
-      
-      const projectInfo = {
-        projectId: item.projectType === 'EXISTING' ? item.projectId : null,
-        locCode: locCode,
-        locName: locName,
-        eqId: eqId,
-        eqName: eqName
-      };
-      
-      // 見積比較シートに記録
-      saveEstimateLink(fileInfo, projectInfo);
+      // 見積り登録は外部の分類リネームGAS・見積りDB側で行う（当システムでは記録しない）
       
       // 新規案件の場合のみ案件作成
       if (item.projectType === 'NEW' && locCode && eqId) {
