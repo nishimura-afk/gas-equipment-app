@@ -35,12 +35,18 @@ function recordExchangeComplete(locationCode, equipmentId, workType, workDate, s
   const rowRange = masterSheet.getRange(rowIndex + 1, 1, 1, headers.length);
   const rowValues = rowRange.getValues()[0];
 
-  if (workType.includes('部品A') || workType.includes('消耗品')) rowValues[headers.indexOf('部品A交換日')] = workDate;
-  else if (workType.includes('部品B') || workType.includes('メンテ')) rowValues[headers.indexOf('部品B最終交換日')] = workDate;
-  else if (workType.includes('本体') || workType.includes('入替')) {
+  if (workType.includes('部品A') || workType.includes('消耗品')) {
+    rowValues[headers.indexOf('部品A交換日')] = workDate;
+  } else if (workType.includes('部品B') || workType.includes('メンテ')) {
+    rowValues[headers.indexOf('部品B最終交換日')] = workDate;
+  } else if (workType.includes('本体') || workType.includes('入替') || workType.includes('更新')) {
+    // 本体更新の場合は全ての日付をリセット
     rowValues[headers.indexOf('設置日(前回実施)')] = workDate;
     rowValues[headers.indexOf('部品A交換日')] = workDate;
     rowValues[headers.indexOf('部品B最終交換日')] = workDate;
+  } else {
+    // その他の作業タイプはデフォルトで設置日を更新
+    rowValues[headers.indexOf('設置日(前回実施)')] = workDate;
   }
   rowValues[9] = ""; 
   rowRange.setValues([rowValues]);
