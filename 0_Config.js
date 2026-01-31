@@ -134,7 +134,7 @@ const SHEET_NAMES = {
       years: 7, 
       label: '灯油計量機検定', 
       searchKey: '灯油検定', 
-      suffix: 'PUMP-K-CHK',
+      suffix: 'PUMP-K-CHK-',
       alertTiming: {
         prepare: 0,
         notice: 0.4    // 4.8ヶ月前
@@ -160,7 +160,7 @@ const SHEET_NAMES = {
       years: 14, 
       label: '灯油計量機更新', 
       searchKey: '灯油計量', 
-      suffix: 'PUMP-K-01',
+      suffix: 'PUMP-K-0',
       seasonal: true,
       alertMonth: 1,
       alertDay: 1
@@ -489,7 +489,7 @@ const SHEET_NAMES = {
       years: 7, 
       label: '灯油パネル更新', 
       searchKey: '灯油パネル', 
-      suffix: 'PARTS-K-PANEL-7Y', 
+      suffix: 'PARTS-K-PANEL-7Y-', 
       seasonal: false,
       alertTiming: {
         prepare: 0,
