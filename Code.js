@@ -641,3 +641,39 @@ function createBulkOrderProject(equipmentId) {
     return { success: false, message: 'エラー: ' + e.message };
   }
 }
+
+/**
+ * ノズルカバー交換の一括案件を作成
+ */
+function createNozzleCoverProject() {
+  const config = getConfig();
+  const targetStores = getNozzleCoverTargetStores();
+  
+  if (targetStores.length === 0) {
+    return { success: false, message: '対象店舗がありません' };
+  }
+  
+  const today = new Date();
+  const targetYear = (today.getMonth() < 3) ? today.getFullYear() : today.getFullYear() + 1;
+  
+  const scheduleSheet = getSheet(config.SHEET_NAMES.SCHEDULE);
+  const uniqueId = Utilities.getUuid();
+  
+  scheduleSheet.appendRow([
+    uniqueId,
+    'BULK',
+    'PARTS-PUMP-1Y',
+    'ノズルカバー交換一括発注(' + targetYear + '年度)',
+    '',
+    config.PROJECT_STATUS.ESTIMATE_REQ,
+    '',
+    'タツノ'
+  ]);
+  
+  return {
+    success: true,
+    projectId: uniqueId,
+    equipmentName: 'ノズルカバー交換',
+    targetCount: targetStores.length
+  };
+}
