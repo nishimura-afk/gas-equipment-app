@@ -200,6 +200,18 @@ function getNozzleCoverTargetStores() {
   var col = {};
   for (var i = 0; i < masterValues[0].length; i++) { col[masterValues[0][i]] = i; }
   
+  // 案件管理シートから既に案件化済みの拠点を取得
+  var scheduleSheet = ss.getSheetByName(config.SHEET_NAMES.SCHEDULE);
+  var scheduleData = scheduleSheet.getDataRange().getValues();
+  var existingProjects = new Set();
+  scheduleData.slice(1).forEach(function(row) {
+    if (row[5] !== config.PROJECT_STATUS.COMPLETED && 
+        row[5] !== config.PROJECT_STATUS.CANCELLED &&
+        row[2] === 'PARTS-PUMP-1Y') {
+      existingProjects.add(row[1]); // 拠点コードを追加
+    }
+  });
+  
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
@@ -238,7 +250,10 @@ for (var locCode in storeDates) {
   
   // 1年後が targetYear の 4月1日以前なら対象
   if (oneYearLater <= targetApril) {
-    result.push({ code: store.code, name: store.name, installDate: latestDate, targetYear: targetYear });
+    // 既に案件化済みの店舗は除外
+    if (!existingProjects.has(store.code)) {
+      result.push({ code: store.code, name: store.name, installDate: latestDate, targetYear: targetYear });
+    }
   }
 }
   result.sort(function(a, b) { return a.code > b.code ? 1 : -1; });
@@ -305,6 +320,16 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
   var gasBodyReplacementLocations = bodyReplacements.gasLocations;
   var keroseneBodyReplacementLocations = bodyReplacements.keroseneLocations;
   
+  // この設備IDで既に案件化済みの拠点を取得
+  var existingProjects = new Set();
+  scheduleData.slice(1).forEach(function(row) {
+    if (row[5] !== config.PROJECT_STATUS.COMPLETED && 
+        row[5] !== config.PROJECT_STATUS.CANCELLED &&
+        row[2] === equipmentId) {
+      existingProjects.add(row[1]); // 拠点コードを追加
+    }
+  });
+  
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var currentYear = today.getFullYear();
@@ -340,7 +365,7 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
       var targetFY = targetYear;
       var diffYears = targetFY - installFY;
       
-      if (diffYears > cycleYears && !storeMap[locCode]) {
+      if (diffYears > cycleYears && !storeMap[locCode] && !existingProjects.has(locCode)) {
         storeMap[locCode] = {
           code: locCode, name: locName, equipmentName: eqName,
           lastDate: baseDate, lastFY: installFY, targetFY: targetFY, diffYears: diffYears
