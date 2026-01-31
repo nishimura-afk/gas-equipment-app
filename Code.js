@@ -340,7 +340,7 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
       var targetFY = targetYear;
       var diffYears = targetFY - installFY;
       
-      if (diffYears >= cycleYears && !storeMap[locCode]) {
+      if (diffYears > cycleYears && !storeMap[locCode]) {
         storeMap[locCode] = {
           code: locCode, name: locName, equipmentName: eqName,
           lastDate: baseDate, lastFY: installFY, targetFY: targetFY, diffYears: diffYears
