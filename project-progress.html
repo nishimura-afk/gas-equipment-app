@@ -9,9 +9,9 @@
     </button>
   </div>
 
-  <div class="bg-white rounded-lg shadow border overflow-hidden">
-    <div class="bg-blue-50 p-4 border-b">
-      <div class="flex items-center text-xs text-gray-600 justify-between px-4 overflow-x-auto">
+  <div class="space-y-6">
+    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+      <div class="flex items-center text-xs text-gray-600 justify-between overflow-x-auto">
         <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold mr-2">1</span>見積依頼中</div>
         <div class="flex-grow border-t-2 border-gray-200 mx-2 min-w-[10px]"></div>
         <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-2">2</span>見積受領</div>
@@ -23,8 +23,8 @@
         <div class="flex items-center whitespace-nowrap"><span class="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold mr-2"><i class="fas fa-check"></i></span>完了</div>
       </div>
     </div>
-    
-    <div id="progress-list-container" class="divide-y bg-white">
+
+    <div id="progress-list-container">
       <div class="p-8 text-center text-gray-500">読み込み中...</div>
     </div>
   </div>
@@ -68,29 +68,42 @@ function progressInit(f=false) {
 }
 
 function renderStatusBars(projects) {
-  const c = document.getElementById('progress-list-container'); c.innerHTML = '';
-  if(!projects || projects.length === 0) { 
-    c.innerHTML = '<div class="p-8 text-center text-gray-500">現在進行中の案件はありません</div>'; 
-    return; 
+  const c = document.getElementById('progress-list-container');
+  c.innerHTML = '';
+  if (!projects || projects.length === 0) {
+    c.innerHTML = '<div class="p-8 text-center text-gray-500">現在進行中の案件はありません</div>';
+    return;
   }
-  
+
   const steps = { '見積依頼中': 1, '見積受領': 2, '発注済': 3, '日程確定': 4 };
-  projects.sort((a,b) => (steps[b.status]||0) - (steps[a.status]||0));
-  
-  projects.forEach(p => {
-    const s = steps[p.status]||0;
-    const w = (s/4)*100;
-    const color = s===4 ? 'bg-green-500' : 'bg-blue-500';
-    
+
+  const legal = projects.filter(p => p.category === '法定検査');
+  const parts = projects.filter(p => p.category === '部材更新');
+  const major = projects.filter(p => !legal.includes(p) && !parts.includes(p));
+
+  const sections = [
+    { key: 'legal', title: '【法定検査】', icon: 'fa-balance-scale', projects: legal, theme: 'indigo' },
+    { key: 'major', title: '【本体更新・入替】', icon: 'fa-exclamation-triangle', projects: major, theme: 'rose' },
+    { key: 'parts', title: '【定期部品交換】', icon: 'fa-cog', projects: parts, theme: 'blue' }
+  ];
+
+  const themeMap = {
+    indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-800', badge: 'text-indigo-600 border-indigo-200', rowHover: 'hover:bg-indigo-50/50' },
+    rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-800', badge: 'text-rose-600 border-rose-200', rowHover: 'hover:bg-rose-50/50' },
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', badge: 'text-blue-600 border-blue-200', rowHover: 'hover:bg-blue-50/50' }
+  };
+
+  function renderProjectItem(p, theme) {
+    const s = steps[p.status] || 0;
+    const w = (s / 4) * 100;
+    const color = s === 4 ? 'bg-green-500' : 'bg-blue-500';
     let btn = '';
-    if(p.status==='見積依頼中') btn=`<button onclick="updateStatus('${p.id}','見積受領')" class="bg-indigo-500 text-white px-2 py-1 rounded text-xs hover:bg-indigo-600">受領へ</button>`;
-    else if(p.status==='見積受領') btn=`<button onclick="updateStatus('${p.id}','発注済')" class="bg-orange-500 text-white px-2 py-1 rounded text-xs hover:bg-orange-600">発注へ</button>`;
-    else if(p.status==='発注済') btn=`<button onclick="openScheduleModal('${p.id}','${p.locName}','${p.equipmentId}','${p.workType}')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700">日程登録</button>`;
-    else if(p.status==='日程確定') btn=`<button onclick="openCompleteModal('${p.id}','${p.rowNumber}','${p.date}','${p.workType}','${p.locName}','${p.equipmentName||p.equipmentId}')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700">完了報告</button>`;
-    
-    const div = document.createElement('div'); 
-    div.className="p-3 hover:bg-gray-50 grid grid-cols-12 gap-4 items-center";
-    div.innerHTML=`
+    if (p.status === '見積依頼中') btn = `<button onclick="updateStatus('${p.id}','見積受領')" class="bg-indigo-500 text-white px-2 py-1 rounded text-xs hover:bg-indigo-600">受領へ</button>`;
+    else if (p.status === '見積受領') btn = `<button onclick="updateStatus('${p.id}','発注済')" class="bg-orange-500 text-white px-2 py-1 rounded text-xs hover:bg-orange-600">発注へ</button>`;
+    else if (p.status === '発注済') btn = `<button onclick="openScheduleModal('${p.id}','${p.locName}','${p.equipmentId}','${p.workType}')" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700">日程登録</button>`;
+    else if (p.status === '日程確定') btn = `<button onclick="openCompleteModal('${p.id}','${p.rowNumber}','${p.date}','${p.workType}','${p.locName}','${p.equipmentName||p.equipmentId}')" class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700">完了報告</button>`;
+
+    return `<div class="p-3 ${theme.rowHover} grid grid-cols-12 gap-4 items-center border-b border-gray-100 last:border-b-0">
       <div class="col-span-4 pl-2">
         <div class="font-bold text-gray-800 text-sm">${p.locName}</div>
         <div class="text-xs text-gray-500">${p.workType} (${p.equipmentName||p.equipmentId})</div>
@@ -102,8 +115,26 @@ function renderStatusBars(projects) {
       <div class="col-span-3 text-right flex justify-end items-center gap-2">
         ${btn}
         <button onclick="deleteProject('${p.id}')" class="text-gray-400 hover:text-red-500 p-1 transition" title="案件を取り消す"><i class="fas fa-trash-alt"></i></button>
+      </div>
+    </div>`;
+  }
+
+  sections.forEach(sec => {
+    const t = themeMap[sec.theme];
+    const count = sec.projects.length;
+    sec.projects.sort((a, b) => (steps[b.status] || 0) - (steps[a.status] || 0));
+
+    const sectionHtml = `
+      <div class="bg-white rounded-lg border-2 ${t.border} shadow-md overflow-hidden">
+        <div class="${t.bg} p-3 border-b ${t.border} flex justify-between items-center">
+          <h3 class="text-lg font-bold ${t.text}"><i class="fas ${sec.icon} mr-2"></i>${sec.title}</h3>
+          <span class="text-xs bg-white px-2 py-1 rounded ${t.badge} font-bold border ${t.border}">${count}件</span>
+        </div>
+        <div class="divide-y divide-gray-100">
+          ${count === 0 ? '<div class="p-6 text-center text-gray-500 text-sm">現在進行中の案件はありません</div>' : sec.projects.map(p => renderProjectItem(p, t)).join('')}
+        </div>
       </div>`;
-    c.appendChild(div);
+    c.insertAdjacentHTML('beforeend', sectionHtml);
   });
 }
 

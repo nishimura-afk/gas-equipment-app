@@ -78,23 +78,35 @@ function getAllActiveProjects() {
   const locMap = buildLocationMap();
   const equipmentList = getEquipmentListCached();
   const eqMap = {};
+  const categoryMap = {};
   equipmentList.forEach(row => {
-    eqMap[`${row['拠点コード']}_${row['設備ID']}`] = row['設備名'] || row['設備ID'];
+    const key = `${row['拠点コード']}_${row['設備ID']}`;
+    eqMap[key] = row['設備名'] || row['設備ID'];
+    categoryMap[key] = row['カテゴリ'] || '';
   });
   return data.slice(1).map((r, i) => {
     const locCode = r[1];
     const eqId = r[2];
     const key = `${locCode}_${eqId}`;
+    const eqName = eqMap[key] || eqId;
+    let category = categoryMap[key] || '';
+    if (!category) {
+      try {
+        const cycle = findCycleByEquipmentId(eqId, eqName, config.MAINTENANCE_CYCLES);
+        category = cycle ? (cycle.category || '') : '';
+      } catch (e) { /* fallback: category stays empty */ }
+    }
     return {
       id: r[0],
       locCode: locCode,
       locName: locMap[locCode] || locCode, 
       equipmentId: eqId,
-      equipmentName: eqMap[key] || eqId,   
+      equipmentName: eqName,   
       workType: r[3],
       date: (r[4] instanceof Date) ? Utilities.formatDate(r[4], Session.getScriptTimeZone(), 'yyyy-MM-dd') : r[4],
       status: r[5],
-      rowNumber: i + 2
+      rowNumber: i + 2,
+      category: category || ''
     };
   }).filter(p => p.status !== config.PROJECT_STATUS.COMPLETED && p.status !== config.PROJECT_STATUS.CANCELLED);
 }
