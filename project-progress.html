@@ -230,34 +230,22 @@ function getStatusBadge(status) {
 
 function updateStatus(id, st) {
   if (confirm('ステータスを更新しますか？')) {
-    applyStatusChange(id, st);
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function() { showLoading(false); clearCache('progress'); progressInit(true); })
+      .withFailureHandler(function(err) { showLoading(false); alert('更新失敗: ' + err); })
+      .updateProjectStatus(id, st);
   }
 }
 
 function revertStatus(id, st) {
   if (confirm('ステータスを「' + st + '」に戻しますか？')) {
-    applyStatusChange(id, st);
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(function() { showLoading(false); clearCache('progress'); progressInit(true); })
+      .withFailureHandler(function(err) { showLoading(false); alert('更新失敗: ' + err); })
+      .updateProjectStatus(id, st);
   }
-}
-
-function applyStatusChange(id, newStatus) {
-  // 楽観的更新: UI を即座に反映
-  if (window.g_cache && window.g_cache.progress) {
-    var p = window.g_cache.progress.find(function(x) { return x.id === id; });
-    if (p) {
-      p.status = newStatus;
-      renderProgress(window.g_cache.progress);
-    }
-  }
-  // サーバー更新は裏で実行（ローディング表示なし）
-  google.script.run
-    .withSuccessHandler(function() { clearCache('progress'); })
-    .withFailureHandler(function(err) {
-      alert('更新に失敗しました。再読み込みします。');
-      clearCache('progress');
-      progressInit(true);
-    })
-    .updateProjectStatus(id, newStatus);
 }
 
 function deleteProject(id) {
