@@ -33,9 +33,9 @@
     <div>
       <label class="block text-xs text-gray-500 mb-1">表示</label>
       <select id="vr-status-filter" onchange="vrRender()" class="border rounded px-2 py-1.5 text-sm">
-        <option value="">全店舗</option>
-        <option value="NG">異常値のみ</option>
+        <option value="NG" selected>異常値のみ</option>
         <option value="要確認">要確認のみ</option>
+        <option value="">全て</option>
       </select>
     </div>
     <div>
@@ -87,9 +87,25 @@
     </div>
   </div>
 
-  <!-- 店舗カードグリッド -->
-  <div id="vr-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-    <div class="col-span-full text-center text-gray-400 py-8">読み込み中...</div>
+  <!-- テーブル -->
+  <div class="bg-white rounded-lg border shadow-sm overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 border-b">
+        <tr>
+          <th class="px-3 py-2 text-left">年月</th>
+          <th class="px-3 py-2 text-left">店舗</th>
+          <th class="px-3 py-2 text-left">機種</th>
+          <th class="px-3 py-2 text-left">レーン</th>
+          <th class="px-3 py-2 text-right">回収率</th>
+          <th class="px-3 py-2 text-center">状態</th>
+          <th class="px-3 py-2 text-center">信頼度</th>
+          <th class="px-3 py-2 text-center">操作</th>
+        </tr>
+      </thead>
+      <tbody id="vr-table-body">
+        <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400">読み込み中...</td></tr>
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -113,7 +129,7 @@ function vrLoad() {
     })
     .withFailureHandler(function(err) {
       showLoading(false);
-      document.getElementById('vr-cards').innerHTML = '<div class="col-span-full text-center text-red-500 py-8">エラー: ' + ((err&&err.message)||err) + '</div>';
+      document.getElementById('vr-table-body').innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-red-500">エラー: ' + ((err&&err.message)||err) + '</td></tr>';
     })
     .getVaporRecoveryData(months);
 
@@ -146,85 +162,56 @@ function vrRender() {
   var storeF = document.getElementById('vr-store-filter').value;
   var statusF = document.getElementById('vr-status-filter').value;
 
-  // 店舗ごとにグループ化
-  var storeMap = {};
-  vrData.records.forEach(function(r) {
-    if (storeF && r.storeName !== storeF) return;
-    if (!storeMap[r.storeName]) storeMap[r.storeName] = { code: r.storeCode, name: r.storeName, d70: [], l100r: null, hasNG: false, hasLow: false, pdfLink: r.pdfLink };
-    if (r.deviceType === 'L100R') {
-      storeMap[r.storeName].l100r = r;
-    } else {
-      storeMap[r.storeName].d70.push(r);
-    }
-    if (r.inRange === 'NG') storeMap[r.storeName].hasNG = true;
-    if (r.confidence === '要確認') storeMap[r.storeName].hasLow = true;
+  var filtered = vrData.records.filter(function(r) {
+    if (storeF && r.storeName !== storeF) return false;
+    if (statusF === 'NG' && r.inRange !== 'NG') return false;
+    if (statusF === '要確認' && r.confidence !== '要確認') return false;
+    return true;
   });
 
-  // フィルタ
-  var storeList = Object.values(storeMap);
-  if (statusF === 'NG') storeList = storeList.filter(function(s) { return s.hasNG; });
-  if (statusF === '要確認') storeList = storeList.filter(function(s) { return s.hasLow; });
-  storeList.sort(function(a,b) { return a.code.localeCompare(b.code); });
-
-  // 正常カウント更新
-  var normalCount = 0;
-  vrData.records.forEach(function(r) { if (r.inRange === 'OK') normalCount++; });
+  var normalCount = vrData.records.filter(function(r) { return r.inRange === 'OK'; }).length;
   document.getElementById('vr-normal-count').textContent = normalCount;
 
-  var container = document.getElementById('vr-cards');
-  if (storeList.length === 0) {
-    container.innerHTML = '<div class="col-span-full text-center text-gray-400 py-8">' + (statusF ? '該当する店舗はありません' : 'データがありません') + '</div>';
+  var tbody = document.getElementById('vr-table-body');
+  if (filtered.length === 0) {
+    var msg = statusF === 'NG' ? '異常値はありません' : statusF === '要確認' ? '要確認はありません' : 'データがありません';
+    tbody.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-gray-400">' + msg + '</td></tr>';
     return;
   }
 
-  var html = '';
-  storeList.forEach(function(store) {
-    var borderColor = store.hasNG ? 'border-red-300 bg-red-50' : store.hasLow ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200';
-    var badge = store.hasNG ? '<span class="bg-red-500 text-white px-2 py-0.5 rounded text-xs">異常あり</span>'
-              : store.hasLow ? '<span class="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs">要確認</span>'
-              : '<span class="bg-green-500 text-white px-2 py-0.5 rounded text-xs">正常</span>';
-
-    html += '<div class="rounded-lg border ' + borderColor + ' p-3 shadow-sm">';
-    html += '<div class="flex justify-between items-center mb-2">';
-    html += '<span class="font-bold text-gray-800">' + store.name + '</span>' + badge;
-    html += '</div>';
-
-    // D70S レーン一覧（横並び）
-    if (store.d70.length > 0) {
-      html += '<div class="text-xs text-gray-500 mb-1">D70S</div>';
-      html += '<div class="flex flex-wrap gap-1 mb-2">';
-      store.d70.sort(function(a,b) { return a.lanePair.localeCompare(b.lanePair); });
-      store.d70.forEach(function(r) {
-        var cls = r.inRange === 'OK' ? 'bg-green-100 text-green-800' : 'bg-red-200 text-red-800 font-bold';
-        if (r.confidence === '要確認') cls = 'bg-yellow-200 text-yellow-800';
-        html += '<span class="' + cls + ' px-2 py-0.5 rounded text-xs cursor-pointer" title="レーン ' + r.lanePair + '" onclick="vrEditInline(this,\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'D70S\',\'' + r.lanePair + '\',\'' + r.rate + '\')">';
-        html += r.lanePair + ':' + r.rate;
-        html += '</span>';
-      });
-      html += '</div>';
-    }
-
-    // L100R
-    if (store.l100r) {
-      var lr = store.l100r;
-      var lCls = lr.inRange === 'OK' ? 'bg-blue-100 text-blue-800' : 'bg-red-200 text-red-800 font-bold';
-      if (lr.confidence === '要確認') lCls = 'bg-yellow-200 text-yellow-800';
-      html += '<div class="text-xs text-gray-500 mb-1">L100R</div>';
-      html += '<span class="' + lCls + ' px-2 py-0.5 rounded text-xs cursor-pointer" onclick="vrEditInline(this,\'' + lr.yearMonth + '\',\'' + lr.storeCode + '\',\'L100R\',\'-\',\'' + lr.rate + '\')">' + lr.rate + '</span>';
-    }
-
-    // PDFリンク
-    if (store.pdfLink) {
-      html += '<div class="mt-2"><a href="' + store.pdfLink + '" target="_blank" class="text-blue-500 hover:underline text-xs"><i class="fas fa-file-pdf mr-1"></i>PDF</a></div>';
-    }
-
-    html += '</div>';
+  filtered.sort(function(a, b) {
+    if (a.yearMonth !== b.yearMonth) return b.yearMonth.localeCompare(a.yearMonth);
+    if (a.storeName !== b.storeName) return a.storeName.localeCompare(b.storeName);
+    if (a.deviceType !== b.deviceType) return a.deviceType.localeCompare(b.deviceType);
+    return a.lanePair.localeCompare(b.lanePair);
   });
 
-  container.innerHTML = html;
+  var html = '';
+  filtered.forEach(function(r) {
+    var rateClass = r.inRange === 'OK' ? 'text-green-700' : 'text-red-700 font-bold';
+    var statusBadge = r.inRange === 'OK'
+      ? '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">正常</span>'
+      : '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs">異常</span>';
+    var confBadge = r.confidence === '要確認'
+      ? '<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-xs">要確認</span>'
+      : '<span class="text-gray-400 text-xs">OK</span>';
+    var rowClass = r.inRange !== 'OK' ? ' bg-red-50' : '';
+
+    html += '<tr class="border-b hover:bg-gray-50' + rowClass + '">';
+    html += '<td class="px-3 py-2">' + r.yearMonth + '</td>';
+    html += '<td class="px-3 py-2">' + r.storeName + '</td>';
+    html += '<td class="px-3 py-2">' + r.deviceType + '</td>';
+    html += '<td class="px-3 py-2">' + r.lanePair + '</td>';
+    html += '<td class="px-3 py-2 text-right ' + rateClass + '">' + r.rate + '</td>';
+    html += '<td class="px-3 py-2 text-center">' + statusBadge + '</td>';
+    html += '<td class="px-3 py-2 text-center">' + confBadge + '</td>';
+    html += '<td class="px-3 py-2 text-center"><button onclick="vrEdit(\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'' + r.deviceType + '\',\'' + r.lanePair + '\',\'' + r.rate + '\')" class="text-blue-600 hover:underline text-xs">修正</button></td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
 }
 
-function vrEditInline(el, yearMonth, storeCode, deviceType, lanePair, currentRate) {
+function vrEdit(yearMonth, storeCode, deviceType, lanePair, currentRate) {
   var newRate = prompt('回収率を修正（例: 0.098）\n現在値: ' + currentRate, currentRate.replace('%',''));
   if (!newRate) return;
   newRate = parseFloat(newRate);
