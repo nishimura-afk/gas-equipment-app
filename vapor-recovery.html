@@ -1,7 +1,7 @@
 <!-- ベーパー回収率管理画面 -->
 <div id="vr-container">
   <!-- サマリーカード -->
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-lg border p-4 shadow-sm">
       <div class="text-sm text-gray-500">対象月</div>
       <div id="vr-latest-month" class="text-2xl font-bold text-gray-800">-</div>
@@ -21,51 +21,38 @@
   </div>
 
   <!-- フィルタ -->
-  <div class="bg-white rounded-lg border p-4 mb-4 shadow-sm flex flex-wrap gap-4 items-end">
+  <div class="bg-white rounded-lg border p-3 mb-4 shadow-sm flex flex-wrap gap-3 items-end">
     <div>
-      <label class="block text-sm text-gray-600 mb-1">表示月数</label>
-      <select id="vr-months-back" onchange="vrLoad()" class="border rounded px-3 py-2 text-sm">
+      <label class="block text-xs text-gray-500 mb-1">表示月数</label>
+      <select id="vr-months-back" onchange="vrLoad()" class="border rounded px-2 py-1.5 text-sm">
         <option value="1" selected>直近1ヶ月</option>
         <option value="3">直近3ヶ月</option>
         <option value="6">直近6ヶ月</option>
-        <option value="12">直近12ヶ月</option>
       </select>
     </div>
     <div>
-      <label class="block text-sm text-gray-600 mb-1">店舗</label>
-      <select id="vr-store-filter" onchange="vrRender()" class="border rounded px-3 py-2 text-sm">
+      <label class="block text-xs text-gray-500 mb-1">表示</label>
+      <select id="vr-status-filter" onchange="vrRender()" class="border rounded px-2 py-1.5 text-sm">
         <option value="">全店舗</option>
-      </select>
-    </div>
-    <div>
-      <label class="block text-sm text-gray-600 mb-1">機種</label>
-      <select id="vr-device-filter" onchange="vrRender()" class="border rounded px-3 py-2 text-sm">
-        <option value="">全て</option>
-        <option value="D70S">D70S（計量機）</option>
-        <option value="L100R">L100R（エコステージ）</option>
-      </select>
-    </div>
-    <div>
-      <label class="block text-sm text-gray-600 mb-1">状態</label>
-      <select id="vr-status-filter" onchange="vrRender()" class="border rounded px-3 py-2 text-sm">
-        <option value="">全て</option>
         <option value="NG">異常値のみ</option>
         <option value="要確認">要確認のみ</option>
       </select>
     </div>
+    <div>
+      <label class="block text-xs text-gray-500 mb-1">店舗</label>
+      <select id="vr-store-filter" onchange="vrRender()" class="border rounded px-2 py-1.5 text-sm">
+        <option value="">全店舗</option>
+      </select>
+    </div>
+    <button onclick="vrShowManualInput()" class="bg-cyan-600 hover:bg-cyan-700 text-white px-3 py-1.5 rounded text-sm">
+      <i class="fas fa-keyboard mr-1"></i>手動入力
+    </button>
   </div>
 
   <!-- 未報告店舗 -->
-  <div id="vr-missing-stores" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-    <div class="flex justify-between items-start">
-      <div>
-        <div class="font-bold text-yellow-800 mb-1"><i class="fas fa-exclamation-triangle mr-1"></i>未報告店舗</div>
-        <div id="vr-missing-list" class="text-sm text-yellow-700"></div>
-      </div>
-      <button onclick="vrShowManualInput()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1.5 rounded text-sm whitespace-nowrap ml-4">
-        <i class="fas fa-keyboard mr-1"></i>手動入力
-      </button>
-    </div>
+  <div id="vr-missing-stores" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+    <span class="font-bold text-yellow-800 text-sm"><i class="fas fa-exclamation-triangle mr-1"></i>未報告: </span>
+    <span id="vr-missing-list" class="text-sm text-yellow-700"></span>
   </div>
 
   <!-- 手動入力フォーム -->
@@ -83,9 +70,7 @@
         </select>
       </div>
       <div class="flex items-end">
-        <button onclick="vrLoadLaneConfig()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded text-sm">
-          <i class="fas fa-sync-alt mr-1"></i>レーン構成取得
-        </button>
+        <button onclick="vrLoadLaneConfig()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded text-sm">レーン構成取得</button>
       </div>
     </div>
     <div id="vr-manual-lanes" class="hidden">
@@ -96,52 +81,28 @@
         <input type="text" id="vr-manual-l100r" placeholder="0.055" class="border rounded px-3 py-2 text-sm w-40">
       </div>
       <div class="flex gap-2">
-        <button onclick="vrSubmitManual()" class="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded text-sm">
-          <i class="fas fa-save mr-1"></i>保存
-        </button>
-        <button onclick="document.getElementById('vr-manual-form').classList.add('hidden')" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm">
-          キャンセル
-        </button>
+        <button onclick="vrSubmitManual()" class="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded text-sm"><i class="fas fa-save mr-1"></i>保存</button>
+        <button onclick="document.getElementById('vr-manual-form').classList.add('hidden')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm">キャンセル</button>
       </div>
     </div>
   </div>
 
-  <!-- テーブル -->
-  <div class="bg-white rounded-lg border shadow-sm overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 border-b">
-        <tr>
-          <th class="px-3 py-2 text-left">年月</th>
-          <th class="px-3 py-2 text-left">店舗</th>
-          <th class="px-3 py-2 text-left">機種</th>
-          <th class="px-3 py-2 text-left">レーン</th>
-          <th class="px-3 py-2 text-right">回収率</th>
-          <th class="px-3 py-2 text-center">状態</th>
-          <th class="px-3 py-2 text-center">信頼度</th>
-          <th class="px-3 py-2 text-center">PDF</th>
-          <th class="px-3 py-2 text-center">操作</th>
-        </tr>
-      </thead>
-      <tbody id="vr-table-body">
-        <tr><td colspan="9" class="px-3 py-8 text-center text-gray-400">読み込み中...</td></tr>
-      </tbody>
-    </table>
+  <!-- 店舗カードグリッド -->
+  <div id="vr-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+    <div class="col-span-full text-center text-gray-400 py-8">読み込み中...</div>
   </div>
 </div>
 
 <script>
-let vrData = null;
+var vrData = null;
 
-function vrInit() {
-  vrLoad();
-}
+function vrInit() { vrLoad(); }
 
 function vrLoad() {
-  const months = parseInt(document.getElementById('vr-months-back').value) || 3;
+  var months = parseInt(document.getElementById('vr-months-back').value) || 1;
   showLoading(true);
   google.script.run
     .withSuccessHandler(function(data) {
-      // 配列→オブジェクトに変換
       data.records = (data.rows || []).map(function(r) {
         return {yearMonth:r[0],storeCode:r[1],storeName:r[2],deviceType:r[3],lanePair:r[4],rate:r[5],inRange:r[6],confidence:r[7],pdfLink:r[8]};
       });
@@ -152,22 +113,19 @@ function vrLoad() {
     })
     .withFailureHandler(function(err) {
       showLoading(false);
-      var msg = (err && err.message) ? err.message : String(err);
-      document.getElementById('vr-table-body').innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-red-500">エラー: ' + msg + '</td></tr>';
+      document.getElementById('vr-cards').innerHTML = '<div class="col-span-full text-center text-red-500 py-8">エラー: ' + ((err&&err.message)||err) + '</div>';
     })
     .getVaporRecoveryData(months);
 
-  // サマリーも取得
   google.script.run
-    .withFailureHandler(function(err) { console.error('VR summary error:', err); })
-    .withSuccessHandler(function(summary) {
-      document.getElementById('vr-latest-month').textContent = summary.latestMonth || '-';
-      document.getElementById('vr-anomaly-count').textContent = summary.anomalyCount;
-      document.getElementById('vr-lowconf-count').textContent = summary.lowConfidenceCount;
-
-      if (summary.missingStores && summary.missingStores.length > 0) {
+    .withFailureHandler(function() {})
+    .withSuccessHandler(function(s) {
+      document.getElementById('vr-latest-month').textContent = s.latestMonth || '-';
+      document.getElementById('vr-anomaly-count').textContent = s.anomalyCount;
+      document.getElementById('vr-lowconf-count').textContent = s.lowConfidenceCount;
+      if (s.missingStores && s.missingStores.length > 0) {
         document.getElementById('vr-missing-stores').classList.remove('hidden');
-        document.getElementById('vr-missing-list').textContent = summary.missingStores.join('、');
+        document.getElementById('vr-missing-list').textContent = s.missingStores.join('、');
       } else {
         document.getElementById('vr-missing-stores').classList.add('hidden');
       }
@@ -177,129 +135,124 @@ function vrLoad() {
 
 function updateStoreFilter(stores) {
   var sel = document.getElementById('vr-store-filter');
-  var current = sel.value;
+  var cur = sel.value;
   sel.innerHTML = '<option value="">全店舗</option>';
-  (stores || []).forEach(function(s) {
-    sel.innerHTML += '<option value="' + s + '">' + s + '</option>';
-  });
-  sel.value = current;
+  (stores||[]).forEach(function(s) { sel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
+  sel.value = cur;
 }
 
 function vrRender() {
   if (!vrData) return;
+  var storeF = document.getElementById('vr-store-filter').value;
+  var statusF = document.getElementById('vr-status-filter').value;
 
-  var store = document.getElementById('vr-store-filter').value;
-  var device = document.getElementById('vr-device-filter').value;
-  var status = document.getElementById('vr-status-filter').value;
-
-  var filtered = vrData.records.filter(function(r) {
-    if (store && r.storeName !== store) return false;
-    if (device && r.deviceType !== device) return false;
-    if (status === 'NG' && r.inRange !== 'NG') return false;
-    if (status === '要確認' && r.confidence !== '要確認') return false;
-    return true;
+  // 店舗ごとにグループ化
+  var storeMap = {};
+  vrData.records.forEach(function(r) {
+    if (storeF && r.storeName !== storeF) return;
+    if (!storeMap[r.storeName]) storeMap[r.storeName] = { code: r.storeCode, name: r.storeName, d70: [], l100r: null, hasNG: false, hasLow: false, pdfLink: r.pdfLink };
+    if (r.deviceType === 'L100R') {
+      storeMap[r.storeName].l100r = r;
+    } else {
+      storeMap[r.storeName].d70.push(r);
+    }
+    if (r.inRange === 'NG') storeMap[r.storeName].hasNG = true;
+    if (r.confidence === '要確認') storeMap[r.storeName].hasLow = true;
   });
 
-  // サマリー更新
-  var normalCount = filtered.filter(function(r) { return r.inRange === 'OK'; }).length;
+  // フィルタ
+  var storeList = Object.values(storeMap);
+  if (statusF === 'NG') storeList = storeList.filter(function(s) { return s.hasNG; });
+  if (statusF === '要確認') storeList = storeList.filter(function(s) { return s.hasLow; });
+  storeList.sort(function(a,b) { return a.code.localeCompare(b.code); });
+
+  // 正常カウント更新
+  var normalCount = 0;
+  vrData.records.forEach(function(r) { if (r.inRange === 'OK') normalCount++; });
   document.getElementById('vr-normal-count').textContent = normalCount;
 
-  var tbody = document.getElementById('vr-table-body');
-  if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-gray-400">データがありません</td></tr>';
+  var container = document.getElementById('vr-cards');
+  if (storeList.length === 0) {
+    container.innerHTML = '<div class="col-span-full text-center text-gray-400 py-8">' + (statusF ? '該当する店舗はありません' : 'データがありません') + '</div>';
     return;
   }
 
-  // 年月降順 → 店舗名 → レーン順
-  filtered.sort(function(a, b) {
-    if (a.yearMonth !== b.yearMonth) return b.yearMonth.localeCompare(a.yearMonth);
-    if (a.storeName !== b.storeName) return a.storeName.localeCompare(b.storeName);
-    if (a.deviceType !== b.deviceType) return a.deviceType.localeCompare(b.deviceType);
-    return a.lanePair.localeCompare(b.lanePair);
-  });
-
   var html = '';
-  filtered.forEach(function(r) {
-    var rateClass = r.inRange === 'OK' ? 'text-green-700' : 'text-red-700 font-bold';
-    var statusBadge = r.inRange === 'OK'
-      ? '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">正常</span>'
-      : '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs">異常</span>';
-    var confBadge = r.confidence === '要確認'
-      ? '<span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-xs">要確認</span>'
-      : '<span class="text-gray-400 text-xs">OK</span>';
-    var pdfLink = r.pdfLink
-      ? '<a href="' + r.pdfLink + '" target="_blank" class="text-blue-600 hover:underline text-xs"><i class="fas fa-file-pdf mr-1"></i>原本</a>'
-      : '-';
+  storeList.forEach(function(store) {
+    var borderColor = store.hasNG ? 'border-red-300 bg-red-50' : store.hasLow ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200';
+    var badge = store.hasNG ? '<span class="bg-red-500 text-white px-2 py-0.5 rounded text-xs">異常あり</span>'
+              : store.hasLow ? '<span class="bg-yellow-500 text-white px-2 py-0.5 rounded text-xs">要確認</span>'
+              : '<span class="bg-green-500 text-white px-2 py-0.5 rounded text-xs">正常</span>';
 
-    html += '<tr class="border-b hover:bg-gray-50' + (r.inRange !== 'OK' ? ' bg-red-50' : '') + '">';
-    html += '<td class="px-3 py-2">' + r.yearMonth + '</td>';
-    html += '<td class="px-3 py-2">' + r.storeName + '</td>';
-    html += '<td class="px-3 py-2">' + r.deviceType + '</td>';
-    html += '<td class="px-3 py-2">' + r.lanePair + '</td>';
-    html += '<td class="px-3 py-2 text-right ' + rateClass + '">' + r.rate + '</td>';
-    html += '<td class="px-3 py-2 text-center">' + statusBadge + '</td>';
-    html += '<td class="px-3 py-2 text-center">' + confBadge + '</td>';
-    html += '<td class="px-3 py-2 text-center">' + pdfLink + '</td>';
-    html += '<td class="px-3 py-2 text-center">';
-    if (r.confidence === '要確認') {
-      html += '<button onclick="vrEdit(\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'' + r.deviceType + '\',\'' + r.lanePair + '\',\'' + r.rate + '\')" class="text-blue-600 hover:underline text-xs">修正</button>';
+    html += '<div class="rounded-lg border ' + borderColor + ' p-3 shadow-sm">';
+    html += '<div class="flex justify-between items-center mb-2">';
+    html += '<span class="font-bold text-gray-800">' + store.name + '</span>' + badge;
+    html += '</div>';
+
+    // D70S レーン一覧（横並び）
+    if (store.d70.length > 0) {
+      html += '<div class="text-xs text-gray-500 mb-1">D70S</div>';
+      html += '<div class="flex flex-wrap gap-1 mb-2">';
+      store.d70.sort(function(a,b) { return a.lanePair.localeCompare(b.lanePair); });
+      store.d70.forEach(function(r) {
+        var cls = r.inRange === 'OK' ? 'bg-green-100 text-green-800' : 'bg-red-200 text-red-800 font-bold';
+        if (r.confidence === '要確認') cls = 'bg-yellow-200 text-yellow-800';
+        html += '<span class="' + cls + ' px-2 py-0.5 rounded text-xs cursor-pointer" title="レーン ' + r.lanePair + '" onclick="vrEditInline(this,\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'D70S\',\'' + r.lanePair + '\',\'' + r.rate + '\')">';
+        html += r.lanePair + ':' + r.rate;
+        html += '</span>';
+      });
+      html += '</div>';
     }
-    html += '</td>';
-    html += '</tr>';
+
+    // L100R
+    if (store.l100r) {
+      var lr = store.l100r;
+      var lCls = lr.inRange === 'OK' ? 'bg-blue-100 text-blue-800' : 'bg-red-200 text-red-800 font-bold';
+      if (lr.confidence === '要確認') lCls = 'bg-yellow-200 text-yellow-800';
+      html += '<div class="text-xs text-gray-500 mb-1">L100R</div>';
+      html += '<span class="' + lCls + ' px-2 py-0.5 rounded text-xs cursor-pointer" onclick="vrEditInline(this,\'' + lr.yearMonth + '\',\'' + lr.storeCode + '\',\'L100R\',\'-\',\'' + lr.rate + '\')">' + lr.rate + '</span>';
+    }
+
+    // PDFリンク
+    if (store.pdfLink) {
+      html += '<div class="mt-2"><a href="' + store.pdfLink + '" target="_blank" class="text-blue-500 hover:underline text-xs"><i class="fas fa-file-pdf mr-1"></i>PDF</a></div>';
+    }
+
+    html += '</div>';
   });
 
-  tbody.innerHTML = html;
+  container.innerHTML = html;
 }
 
-function vrEdit(yearMonth, storeCode, deviceType, lanePair, currentRate) {
-  var newRate = prompt('回収率を修正してください（例: 0.098）\n現在値: ' + currentRate, currentRate.replace('%',''));
+function vrEditInline(el, yearMonth, storeCode, deviceType, lanePair, currentRate) {
+  var newRate = prompt('回収率を修正（例: 0.098）\n現在値: ' + currentRate, currentRate.replace('%',''));
   if (!newRate) return;
   newRate = parseFloat(newRate);
   if (isNaN(newRate)) { alert('数値を入力してください'); return; }
-
   showLoading(true);
   google.script.run
-    .withSuccessHandler(function() {
-      showLoading(false);
-      vrLoad();
-    })
-    .withFailureHandler(function(err) {
-      showLoading(false);
-      alert('更新に失敗: ' + err.message);
-    })
+    .withSuccessHandler(function() { showLoading(false); vrLoad(); })
+    .withFailureHandler(function(err) { showLoading(false); alert('更新失敗: ' + ((err&&err.message)||err)); })
     .updateVaporRecoveryRate(yearMonth, storeCode, deviceType, lanePair, newRate);
 }
 
 // ── 手動入力 ──
-
 function vrShowManualInput() {
   var form = document.getElementById('vr-manual-form');
   form.classList.remove('hidden');
-
-  // 最新月をデフォルトにセット
-  if (vrData && vrData.latestMonth) {
-    document.getElementById('vr-manual-month').value = vrData.latestMonth;
-  }
-
-  // 店舗セレクトを拠点マスタから構築
+  if (vrData && vrData.latestMonth) document.getElementById('vr-manual-month').value = vrData.latestMonth;
   var sel = document.getElementById('vr-manual-store');
   sel.innerHTML = '<option value="">選択してください</option>';
-  // 未報告店舗を先頭に
-  var missingEl = document.getElementById('vr-missing-list');
-  var missingText = missingEl ? missingEl.textContent : '';
-  var missingStores = missingText ? missingText.split('、') : [];
-  if (missingStores.length > 0) {
+  var missingText = document.getElementById('vr-missing-list')?.textContent || '';
+  var missing = missingText ? missingText.split('、') : [];
+  if (missing.length > 0) {
     sel.innerHTML += '<optgroup label="未報告">';
-    missingStores.forEach(function(s) {
-      sel.innerHTML += '<option value="' + s + '">' + s + '</option>';
-    });
+    missing.forEach(function(s) { sel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
     sel.innerHTML += '</optgroup>';
   }
   if (vrData && vrData.stores) {
     sel.innerHTML += '<optgroup label="全店舗">';
-    vrData.stores.forEach(function(s) {
-      sel.innerHTML += '<option value="' + s + '">' + s + '</option>';
-    });
+    vrData.stores.forEach(function(s) { sel.innerHTML += '<option value="'+s+'">'+s+'</option>'; });
     sel.innerHTML += '</optgroup>';
   }
 }
@@ -307,39 +260,22 @@ function vrShowManualInput() {
 function vrLoadLaneConfig() {
   var storeName = document.getElementById('vr-manual-store').value;
   if (!storeName) return;
-
-  // 拠点コードを逆引き（vrDataから）
   var storeCode = '';
   if (vrData && vrData.records) {
-    var match = vrData.records.find(function(r) { return r.storeName === storeName; });
-    if (match) storeCode = match.storeCode;
+    var m = vrData.records.find(function(r) { return r.storeName === storeName; });
+    if (m) storeCode = m.storeCode;
   }
-
-  if (!storeCode) {
-    // コードが見つからない場合はデフォルト構成を表示
-    renderLaneInputs({ d70Lanes: ['1.2', '3.4', '5.6', '7.8'], hasL100R: true });
-    return;
-  }
-
-  google.script.run
-    .withSuccessHandler(renderLaneInputs)
-    .getStoreLaneConfig(storeCode);
+  if (!storeCode) { renderLaneInputs({d70Lanes:['1.2','3.4','5.6','7.8'],hasL100R:true}); return; }
+  google.script.run.withSuccessHandler(renderLaneInputs).getStoreLaneConfig(storeCode);
 }
 
 function renderLaneInputs(config) {
-  var container = document.getElementById('vr-manual-d70-inputs');
-  container.innerHTML = '';
-  (config.d70Lanes || []).forEach(function(lane) {
-    container.innerHTML += '<div class="flex items-center gap-1"><span class="text-xs text-gray-500 w-8">' + lane + '</span><input type="text" data-lane="' + lane + '" placeholder="0.10" class="border rounded px-2 py-1 text-sm w-24 vr-d70-input"></div>';
+  var c = document.getElementById('vr-manual-d70-inputs');
+  c.innerHTML = '';
+  (config.d70Lanes||[]).forEach(function(lane) {
+    c.innerHTML += '<div class="flex items-center gap-1"><span class="text-xs text-gray-500 w-8">'+lane+'</span><input type="text" data-lane="'+lane+'" placeholder="0.10" class="border rounded px-2 py-1 text-sm w-24 vr-d70-input"></div>';
   });
-
-  var l100rRow = document.getElementById('vr-manual-l100r-row');
-  if (config.hasL100R) {
-    l100rRow.classList.remove('hidden');
-  } else {
-    l100rRow.classList.add('hidden');
-  }
-
+  document.getElementById('vr-manual-l100r-row').classList.toggle('hidden', !config.hasL100R);
   document.getElementById('vr-manual-lanes').classList.remove('hidden');
 }
 
@@ -347,41 +283,24 @@ function vrSubmitManual() {
   var yearMonth = document.getElementById('vr-manual-month').value.trim();
   var storeName = document.getElementById('vr-manual-store').value;
   if (!yearMonth || !storeName) { alert('年月と店舗を入力してください'); return; }
-
-  // storeCodeを取得
   var storeCode = '';
   if (vrData && vrData.records) {
-    var match = vrData.records.find(function(r) { return r.storeName === storeName; });
-    if (match) storeCode = match.storeCode;
+    var m = vrData.records.find(function(r) { return r.storeName === storeName; });
+    if (m) storeCode = m.storeCode;
   }
   if (!storeCode) { alert('拠点コードが特定できません'); return; }
-
   var entries = [];
   document.querySelectorAll('.vr-d70-input').forEach(function(input) {
-    var val = input.value.trim();
-    if (val) {
-      entries.push({ deviceType: 'D70S', lanePair: input.dataset.lane, rate: parseFloat(val) });
-    }
+    var v = input.value.trim();
+    if (v) entries.push({deviceType:'D70S',lanePair:input.dataset.lane,rate:parseFloat(v)});
   });
-
-  var l100rVal = document.getElementById('vr-manual-l100r').value.trim();
-  if (l100rVal) {
-    entries.push({ deviceType: 'L100R', lanePair: '-', rate: parseFloat(l100rVal) });
-  }
-
+  var l = document.getElementById('vr-manual-l100r').value.trim();
+  if (l) entries.push({deviceType:'L100R',lanePair:'-',rate:parseFloat(l)});
   if (entries.length === 0) { alert('少なくとも1つの回収率を入力してください'); return; }
-
   showLoading(true);
   google.script.run
-    .withSuccessHandler(function() {
-      showLoading(false);
-      document.getElementById('vr-manual-form').classList.add('hidden');
-      vrLoad();
-    })
-    .withFailureHandler(function(err) {
-      showLoading(false);
-      alert('保存に失敗: ' + err.message);
-    })
+    .withSuccessHandler(function() { showLoading(false); document.getElementById('vr-manual-form').classList.add('hidden'); vrLoad(); })
+    .withFailureHandler(function(err) { showLoading(false); alert('保存失敗: ' + ((err&&err.message)||err)); })
     .addVaporRecoveryManual(yearMonth, storeCode, entries);
 }
 
