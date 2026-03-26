@@ -703,6 +703,7 @@ const VR_NORMAL_RANGE = { min: 0.05, max: 0.2 };
 
 /**
  * 回収率データを取得（最新N ヶ月分）
+ * 末尾から必要行数だけ読み取り高速化
  */
 function getVaporRecoveryData(monthsBack) {
   const config = getConfig();
@@ -710,14 +711,15 @@ function getVaporRecoveryData(monthsBack) {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return { records: [], stores: [], latestMonth: '' };
 
-  const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+  const n = monthsBack || 3;
+  // 1ヶ月あたり最大 26店舗 × 6レーン = 約156行。余裕を持って200行/月
+  const readRows = Math.min(lastRow - 1, n * 200);
+  const startRow = lastRow - readRows + 1;
+  const data = sheet.getRange(startRow, 1, readRows, 12).getValues();
 
-  // 全年月を収集してソート
+  // 年月を収集してソート
   const allMonths = [...new Set(data.map(r => r[0]).filter(Boolean))].sort();
   const latestMonth = allMonths[allMonths.length - 1] || '';
-
-  // フィルタ: 直近N ヶ月
-  const n = monthsBack || 3;
   const targetMonths = new Set(allMonths.slice(-n));
 
   const records = data
@@ -744,6 +746,7 @@ function getVaporRecoveryData(monthsBack) {
 
 /**
  * 回収率ダッシュボード用サマリー
+ * 末尾200行だけ読み取り高速化
  */
 function getVaporRecoverySummary() {
   const config = getConfig();
@@ -751,7 +754,10 @@ function getVaporRecoverySummary() {
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
 
-  const data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+  // 最新1ヶ月分 = 末尾200行で十分
+  const readRows = Math.min(lastRow - 1, 200);
+  const startRow = lastRow - readRows + 1;
+  const data = sheet.getRange(startRow, 1, readRows, 8).getValues();
 
   // 最新月を特定
   const allMonths = [...new Set(data.map(r => r[0]).filter(Boolean))].sort();
