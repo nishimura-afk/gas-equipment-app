@@ -741,10 +741,10 @@ function getVaporRecoveryData(monthsBack) {
     if (lastRow <= 1) return { rows: [], stores: [], latestMonth: '', allMonths: [] };
 
     const n = monthsBack || 1;
-    // 必要な列だけ読む（A〜I = 9列）
-    const readRows = Math.min(lastRow - 1, n * 200);
+    // A〜O = 15列（依頼日・修理日・対応メモ含む）
+    const readRows = Math.min(lastRow - 1, n * 400);
     const startRow = lastRow - readRows + 1;
-    const data = sheet.getRange(startRow, 1, readRows, 9).getValues();
+    const data = sheet.getRange(startRow, 1, readRows, 15).getValues();
 
     // 全セルを文字列化（Date型やオブジェクトの直列化問題を回避）
     var allMonths = [];
@@ -773,7 +773,8 @@ function getVaporRecoveryData(monthsBack) {
         } else {
           rateStr = String(rateVal);
         }
-        rows.push([String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), rateStr, String(r[6]), String(r[7]), String(r[8] || '')]);
+        // [yearMonth,storeCode,storeName,deviceType,lanePair,rate,inRange,confidence,pdfLink,requestDate,repairDate,memo]
+        rows.push([String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), rateStr, String(r[6]), String(r[7]), String(r[8] || ''), String(r[12] || ''), String(r[13] || ''), String(r[14] || '')]);
         if (r[2] && !storeSet[r[2]]) storeSet[String(r[2])] = true;
       }
     }
@@ -797,7 +798,8 @@ function getVaporRecoverySummary() {
     var lastRow = sheet.getLastRow();
     if (lastRow <= 1) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
 
-    var readRows = Math.min(lastRow - 1, 200);
+    // 26店舗×最大12レーン=312行/月。余裕を持って400行
+    var readRows = Math.min(lastRow - 1, 400);
     var startRow = lastRow - readRows + 1;
     var data = sheet.getRange(startRow, 1, readRows, 8).getValues();
 
@@ -919,4 +921,77 @@ function getStoreLaneConfig(storeCode) {
     d70Lanes: d70Lanes.length > 0 ? d70Lanes : ['1.2', '3.4'],
     hasL100R
   };
+}
+
+// =================================================================
+// 回収率 点検依頼管理
+// =================================================================
+
+/**
+ * 異常値に対する点検依頼メールの下書きを作成
+ */
+function createVRInspectionDraft(yearMonth, storeName, deviceType, lanePair, rate) {
+  var config = getConfig();
+  var vendor = deviceType === 'L100R' ? config.VENDORS.TATSUNO : config.VENDORS.TATSUNO;
+  var subject = '【点検依頼】ベーパーリカバリー異常値の件';
+  var deviceLabel = deviceType === 'D70S' ? 'ガソリン計量機（D70S）' : 'エコステージ（L100R）';
+  var laneInfo = lanePair !== '-' ? 'レーン ' + lanePair : '';
+
+  var body = 'お世話になっております。\n\n';
+  body += '下記の設備でベーパーリカバリー回収率に異常が見られましたので、\n';
+  body += '点検をお願いしたく存じます。\n\n';
+  body += '■ 店舗: セルフィックス' + storeName + '\n';
+  body += '■ 設備: ' + deviceLabel + (laneInfo ? ' ' + laneInfo : '') + '\n';
+  body += '■ 対象月: ' + yearMonth + '\n';
+  body += '■ 回収率: ' + rate + '（正常範囲: 0.05%〜0.2%）\n\n';
+  body += 'ご確認のうえ、点検日程のご連絡をお願いいたします。\n\n';
+  body += '--------------------------------------------------\n';
+  body += '日商有田株式会社\n西村\n';
+  body += '--------------------------------------------------';
+
+  GmailApp.createDraft('', subject, body, { from: config.ADMIN_MAIL });
+
+  return successResponse({
+    message: '下書きを作成しました',
+    subject: subject,
+    vendor: vendor.name
+  });
+}
+
+/**
+ * 点検依頼日を記録
+ */
+function recordVRInspectionRequest(yearMonth, storeCode, deviceType, lanePair) {
+  var sheet = getVRSheet();
+  var data = sheet.getDataRange().getValues();
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy/MM/dd');
+
+  for (var i = 1; i < data.length; i++) {
+    var ym = normalizeYearMonth(data[i][0]);
+    if (ym === yearMonth && data[i][1] === storeCode &&
+        data[i][3] === deviceType && data[i][4] === lanePair) {
+      sheet.getRange(i + 1, 13).setValue(today);  // M列: 依頼日
+      return successResponse({ recorded: true, date: today });
+    }
+  }
+  return errorResponse('該当データが見つかりません');
+}
+
+/**
+ * 修理完了日を記録
+ */
+function recordVRRepairComplete(yearMonth, storeCode, deviceType, lanePair, repairDate, memo) {
+  var sheet = getVRSheet();
+  var data = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < data.length; i++) {
+    var ym = normalizeYearMonth(data[i][0]);
+    if (ym === yearMonth && data[i][1] === storeCode &&
+        data[i][3] === deviceType && data[i][4] === lanePair) {
+      sheet.getRange(i + 1, 14).setValue(repairDate);  // N列: 修理日
+      if (memo) sheet.getRange(i + 1, 15).setValue(memo);  // O列: 対応メモ
+      return successResponse({ recorded: true });
+    }
+  }
+  return errorResponse('該当データが見つかりません');
 }

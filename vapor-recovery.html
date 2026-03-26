@@ -98,12 +98,13 @@
           <th class="px-3 py-2 text-left">レーン</th>
           <th class="px-3 py-2 text-right">回収率</th>
           <th class="px-3 py-2 text-center">状態</th>
-          <th class="px-3 py-2 text-center">信頼度</th>
+          <th class="px-3 py-2 text-center">依頼日</th>
+          <th class="px-3 py-2 text-center">修理日</th>
           <th class="px-3 py-2 text-center">操作</th>
         </tr>
       </thead>
       <tbody id="vr-table-body">
-        <tr><td colspan="8" class="px-3 py-8 text-center text-gray-400">読み込み中...</td></tr>
+        <tr><td colspan="9" class="px-3 py-8 text-center text-gray-400">読み込み中...</td></tr>
       </tbody>
     </table>
   </div>
@@ -120,7 +121,7 @@ function vrLoad() {
   google.script.run
     .withSuccessHandler(function(data) {
       data.records = (data.rows || []).map(function(r) {
-        return {yearMonth:r[0],storeCode:r[1],storeName:r[2],deviceType:r[3],lanePair:r[4],rate:r[5],inRange:r[6],confidence:r[7],pdfLink:r[8]};
+        return {yearMonth:r[0],storeCode:r[1],storeName:r[2],deviceType:r[3],lanePair:r[4],rate:r[5],inRange:r[6],confidence:r[7],pdfLink:r[8],requestDate:r[9]||'',repairDate:r[10]||'',memo:r[11]||''};
       });
       vrData = data;
       updateStoreFilter(data.stores);
@@ -129,7 +130,7 @@ function vrLoad() {
     })
     .withFailureHandler(function(err) {
       showLoading(false);
-      document.getElementById('vr-table-body').innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-red-500">エラー: ' + ((err&&err.message)||err) + '</td></tr>';
+      document.getElementById('vr-table-body').innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-red-500">エラー: ' + ((err&&err.message)||err) + '</td></tr>';
     })
     .getVaporRecoveryData(months);
 
@@ -175,7 +176,7 @@ function vrRender() {
   var tbody = document.getElementById('vr-table-body');
   if (filtered.length === 0) {
     var msg = statusF === 'NG' ? '異常値はありません' : statusF === '要確認' ? '要確認はありません' : 'データがありません';
-    tbody.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-gray-400">' + msg + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-gray-400">' + msg + '</td></tr>';
     return;
   }
 
@@ -204,7 +205,26 @@ function vrRender() {
     html += '<td class="px-3 py-2">' + r.lanePair + '</td>';
     html += '<td class="px-3 py-2 text-right ' + rateClass + '">' + r.rate + '</td>';
     html += '<td class="px-3 py-2 text-center">' + statusBadge + '</td>';
-    html += '<td class="px-3 py-2 text-center">' + confBadge + '</td>';
+
+    // 依頼日
+    if (r.requestDate) {
+      html += '<td class="px-3 py-2 text-center text-xs text-gray-600">' + r.requestDate + '</td>';
+    } else if (r.inRange === 'NG') {
+      html += '<td class="px-3 py-2 text-center"><button onclick="vrRequestInspection(\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'' + r.storeName + '\',\'' + r.deviceType + '\',\'' + r.lanePair + '\',\'' + r.rate + '\')" class="bg-orange-500 hover:bg-orange-600 text-white px-2 py-0.5 rounded text-xs">依頼</button></td>';
+    } else {
+      html += '<td class="px-3 py-2 text-center text-xs text-gray-300">-</td>';
+    }
+
+    // 修理日
+    if (r.repairDate) {
+      html += '<td class="px-3 py-2 text-center text-xs text-green-600">' + r.repairDate + '</td>';
+    } else if (r.requestDate) {
+      html += '<td class="px-3 py-2 text-center"><button onclick="vrRecordRepair(\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'' + r.deviceType + '\',\'' + r.lanePair + '\')" class="bg-green-500 hover:bg-green-600 text-white px-2 py-0.5 rounded text-xs">完了</button></td>';
+    } else {
+      html += '<td class="px-3 py-2 text-center text-xs text-gray-300">-</td>';
+    }
+
+    // 操作
     html += '<td class="px-3 py-2 text-center"><button onclick="vrEdit(\'' + r.yearMonth + '\',\'' + r.storeCode + '\',\'' + r.deviceType + '\',\'' + r.lanePair + '\',\'' + r.rate + '\')" class="text-blue-600 hover:underline text-xs">修正</button></td>';
     html += '</tr>';
   });
@@ -221,6 +241,38 @@ function vrEdit(yearMonth, storeCode, deviceType, lanePair, currentRate) {
     .withSuccessHandler(function() { showLoading(false); vrLoad(); })
     .withFailureHandler(function(err) { showLoading(false); alert('更新失敗: ' + ((err&&err.message)||err)); })
     .updateVaporRecoveryRate(yearMonth, storeCode, deviceType, lanePair, newRate);
+}
+
+// ── 点検依頼 ──
+function vrRequestInspection(yearMonth, storeCode, storeName, deviceType, lanePair, rate) {
+  if (!confirm(storeName + ' ' + deviceType + ' ' + lanePair + '\n回収率: ' + rate + '\n\n点検依頼メール下書きを作成し、依頼日を記録しますか？')) return;
+  showLoading(true);
+  // 1. メール下書き作成
+  google.script.run
+    .withSuccessHandler(function(res) {
+      // 2. 依頼日を記録
+      google.script.run
+        .withSuccessHandler(function() {
+          showLoading(false);
+          alert('下書きを作成し、依頼日を記録しました。\nGmailの下書きを確認してください。');
+          vrLoad();
+        })
+        .withFailureHandler(function(err) { showLoading(false); alert('依頼日記録エラー: ' + ((err&&err.message)||err)); })
+        .recordVRInspectionRequest(yearMonth, storeCode, deviceType, lanePair);
+    })
+    .withFailureHandler(function(err) { showLoading(false); alert('下書き作成エラー: ' + ((err&&err.message)||err)); })
+    .createVRInspectionDraft(yearMonth, storeName, deviceType, lanePair, rate);
+}
+
+function vrRecordRepair(yearMonth, storeCode, deviceType, lanePair) {
+  var repairDate = prompt('修理完了日を入力してください（例: 2026/02/15）', new Date().toLocaleDateString('sv-SE').replace(/-/g, '/'));
+  if (!repairDate) return;
+  var memo = prompt('対応メモ（任意）', '');
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(function() { showLoading(false); vrLoad(); })
+    .withFailureHandler(function(err) { showLoading(false); alert('記録エラー: ' + ((err&&err.message)||err)); })
+    .recordVRRepairComplete(yearMonth, storeCode, deviceType, lanePair, repairDate, memo || '');
 }
 
 // ── 手動入力 ──
