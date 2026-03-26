@@ -47,12 +47,12 @@ function getDashboardData() {
     // 既に案件化されているものは除外
     if (ignoreActions.includes(equipmentKey)) return false;
     
-    // ガソリン計量機部品(4年)の除外判定
+    // 計量機シール類交換(4年)の除外判定
     if (m['設備ID'] === 'PARTS-PUMP-4Y' && gasBodyReplacementLocations.has(m['拠点コード'])) {
       return false;
     }
     
-    // 灯油パネル更新の除外判定
+    // 灯油パネル・シール交換の除外判定
     if (m['設備ID'] === 'PARTS-K-PANEL-7Y' && keroseneBodyReplacementLocations.has(m['拠点コード'])) {
       return false;
     }
@@ -180,7 +180,7 @@ function completeExchange(uniqueId, date, subsidy) {
 
 function generateQuoteRequest(locName, eqName, workType) {
   let displayEqName = eqName;
-  if (displayEqName.includes('釣銭機カバー')) displayEqName = displayEqName.replace('釣銭機カバー', '投入/取出し口のプラスチックカバー');
+  if (displayEqName.includes('釣銭機タッチパネル・カバー')) displayEqName = displayEqName.replace('釣銭機タッチパネル・カバー交換', 'タッチパネル及び投入/取出し口プラスチックカバー交換');
   if (displayEqName.includes('パネル')) displayEqName = displayEqName.replace('パネル', 'タッチパネル');
   return `見積依頼...`;
 }
@@ -191,10 +191,10 @@ function generateQuoteRequest(locName, eqName, workType) {
 
 function getBulkOrderConfigs() {
   return [
-    { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー', cycle: 1, vendor: 'タツノ', emoji: '📦', searchKey: 'ノズルカバー' },
-    { id: 'PARTS-SEAL-3Y', name: '釣銭機シール貼り替え', cycle: 3, vendor: 'シャープ', emoji: '🔧', searchKey: 'シール' },
-    { id: 'CHG-01', name: '釣銭機カバー', cycle: 6, vendor: 'シャープ', emoji: '💳', searchKey: '釣銭機カバー' },
-    { id: 'PARTS-PUMP-4Y', name: 'ガソリン計量機部品(4年)', cycle: 4, vendor: 'タツノ', emoji: '⛽', searchKey: 'ガソリン計量機部品' }
+    { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー・ブーツ交換', cycle: 1, vendor: 'タツノ', emoji: '📦', searchKey: 'ノズルカバー' },
+    { id: 'PARTS-SEAL-3Y', name: '釣銭機シール貼替', cycle: 3, vendor: 'シャープ', emoji: '🔧', searchKey: 'シール' },
+    { id: 'CHG-01', name: '釣銭機タッチパネル・カバー交換', cycle: 6, vendor: 'シャープ', emoji: '💳', searchKey: '釣銭機' },
+    { id: 'PARTS-PUMP-4Y', name: '計量機シール類交換', cycle: 4, vendor: 'タツノ', emoji: '⛽', searchKey: '計量機シール類' }
   ];
 }
 
@@ -277,7 +277,7 @@ function createNozzleCoverDraftEmail(targetStores) {
   var today = new Date();
   var currentMonth = today.getMonth() + 1;
   var fiscalYear = (currentMonth >= 1 && currentMonth <= 3) ? today.getFullYear() : today.getFullYear() + 1;
-  var body = 'お世話になっております。\n\n' + fiscalYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
+  var body = 'お世話になっております。\n\n' + fiscalYear + '年度のノズルカバー・ブーツ交換の発注をお願いいたします。\n\n【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
   for (var i = 0; i < targetStores.length; i++) { 
     body += '- セルフィックス' + targetStores[i].name + '\n'; 
   }
@@ -304,7 +304,7 @@ function getNozzleCoverInfo() {
     }));
 
     return {
-      config: { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー交換', emoji: '📦', vendor: 'タツノ' },
+      config: { id: 'PARTS-PUMP-1Y', name: 'ノズルカバー・ブーツ交換', emoji: '📦', vendor: 'タツノ' },
       hasAlert: safeStores.length > 0,
       targetCount: safeStores.length,
       targetStores: safeStores,
@@ -359,12 +359,12 @@ function getBulkOrderTargetStores(equipmentId, cycleYears, searchKey) {
     
     if (!locCode || !locName) continue;
     
-    // ガソリン計量機部品(4年)の除外判定
+    // 計量機シール類交換(4年)の除外判定
     if (eqId === 'PARTS-PUMP-4Y' && gasBodyReplacementLocations.has(locCode)) {
       continue;
     }
     
-    // 灯油パネル更新の除外判定
+    // 灯油パネル・シール交換の除外判定
     if (eqId === 'PARTS-K-PANEL-7Y' && keroseneBodyReplacementLocations.has(locCode)) {
       continue;
     }
@@ -537,7 +537,7 @@ function createBulkOrderGmailDraft(equipmentId) {
       
       const subject = '【見積依頼】見積り依頼の件';
       let body = 'お世話になっております。\n\n';
-      body += targetYear + '年度のノズルカバー交換の発注をお願いいたします。\n\n';
+      body += targetYear + '年度のノズルカバー・ブーツ交換の発注をお願いいたします。\n\n';
       body += '【対象店舗: ' + targetStores.length + '店舗（全店）】\n\n';
       
       for (let i = 0; i < targetStores.length; i++) {
@@ -679,7 +679,7 @@ function createNozzleCoverProject() {
       uniqueId,
       store.code,
       'PARTS-PUMP-1Y',
-      'ノズルカバー交換(' + targetYear + '年度)',
+      'ノズルカバー・ブーツ交換(' + targetYear + '年度)',
       '',
       config.PROJECT_STATUS.ESTIMATE_REQ,
       '',
@@ -689,7 +689,7 @@ function createNozzleCoverProject() {
   
   return {
     success: true,
-    equipmentName: 'ノズルカバー交換',
+    equipmentName: 'ノズルカバー・ブーツ交換',
     targetCount: targetStores.length
   };
 }

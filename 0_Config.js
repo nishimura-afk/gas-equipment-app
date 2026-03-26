@@ -432,7 +432,7 @@ const SHEET_NAMES = {
     'PARTS_PUMP_1Y': { 
       category: '部材更新', 
       years: 1, 
-      label: '計量機消耗品(毎年)', 
+      label: 'ノズルカバー・ブーツ交換（毎年）', 
       searchKey: 'ノズルカバー', 
       suffix: 'PARTS-PUMP-1Y', 
       seasonal: true,
@@ -443,7 +443,7 @@ const SHEET_NAMES = {
     'PARTS_CHANGE_3Y': { 
       category: '部材更新', 
       years: 3, 
-      label: '釣銭機シール貼替', 
+      label: '釣銭機シール貼替（3年）', 
       searchKey: 'シール', 
       suffix: 'PARTS-SEAL-3Y', 
       seasonal: true,
@@ -454,8 +454,8 @@ const SHEET_NAMES = {
     'PARTS_PUMP_4Y': { 
       category: '部材更新', 
       years: 4, 
-      label: 'ガソリン計量機部品(4年)', 
-      searchKey: 'ガソリン計量機部品', 
+      label: '計量機シール類交換（4年）', 
+      searchKey: '計量機シール類', 
       suffix: 'PARTS-PUMP-4Y', 
       seasonal: true,
       alertMonth: 1,
@@ -477,7 +477,7 @@ const SHEET_NAMES = {
     'PARTS_CHANGE_6Y': { 
       category: '部材更新', 
       years: 6, 
-      label: '釣銭機カバー/パネル', 
+      label: '釣銭機タッチパネル・カバー交換（6年）', 
       searchKey: '釣銭機', 
       suffix: 'CHG-01', 
       seasonal: true,
@@ -488,7 +488,7 @@ const SHEET_NAMES = {
     'PARTS_KEROSENE_7Y': { 
       category: '本体更新',    // カテゴリ変更
       years: 7, 
-      label: '灯油パネル更新', 
+      label: '灯油パネル・シール交換（7年）', 
       searchKey: '灯油パネル', 
       suffix: 'PARTS-K-PANEL-7Y-', 
       seasonal: false,

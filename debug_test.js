@@ -159,7 +159,7 @@ function debugPARTS_PUMP_4Y() {
   // 実際にマッチングできるか確認
   Logger.log('\n=== マッチングテスト ===');
   const testEqId = 'PARTS-PUMP-4Y';
-  const testEqName = 'ガソリン計量機部品(4年)';
+  const testEqName = '計量機シール類交換（4年）';
   
   const matched = findCycleByEquipmentId(testEqId, testEqName, config.MAINTENANCE_CYCLES);
   if (matched) {
