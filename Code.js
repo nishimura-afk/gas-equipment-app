@@ -693,3 +693,162 @@ function createNozzleCoverProject() {
     targetCount: targetStores.length
   };
 }
+
+// =================================================================
+// ベーパー回収率管理
+// =================================================================
+
+/** 回収率の正常範囲 */
+const VR_NORMAL_RANGE = { min: 0.05, max: 0.2 };
+
+/**
+ * 回収率データを取得（最新N ヶ月分）
+ */
+function getVaporRecoveryData(monthsBack) {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { records: [], stores: [], latestMonth: '' };
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
+
+  // 全年月を収集してソート
+  const allMonths = [...new Set(data.map(r => r[0]).filter(Boolean))].sort();
+  const latestMonth = allMonths[allMonths.length - 1] || '';
+
+  // フィルタ: 直近N ヶ月
+  const n = monthsBack || 3;
+  const targetMonths = new Set(allMonths.slice(-n));
+
+  const records = data
+    .filter(r => r[0] && targetMonths.has(r[0]))
+    .map(r => ({
+      yearMonth: r[0],
+      storeCode: r[1],
+      storeName: r[2],
+      deviceType: r[3],
+      lanePair: r[4],
+      rate: r[5],
+      inRange: r[6],
+      confidence: r[7],
+      pdfLink: r[8],
+      fileName: r[9],
+      fetchedAt: r[10],
+      note: r[11]
+    }));
+
+  const stores = [...new Set(records.map(r => r.storeName))].sort();
+
+  return { records, stores, latestMonth, allMonths: allMonths.slice(-12) };
+}
+
+/**
+ * 回収率ダッシュボード用サマリー
+ */
+function getVaporRecoverySummary() {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
+
+  // 最新月を特定
+  const allMonths = [...new Set(data.map(r => r[0]).filter(Boolean))].sort();
+  const latestMonth = allMonths[allMonths.length - 1] || '';
+  if (!latestMonth) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
+
+  const latestData = data.filter(r => r[0] === latestMonth);
+
+  const anomalyCount = latestData.filter(r => r[6] === 'NG').length;
+  const lowConfidenceCount = latestData.filter(r => r[7] === '要確認').length;
+
+  // 全26店舗中、最新月にデータがない店舗
+  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+  const locData = locSheet.getDataRange().getValues();
+  const allStoreNames = locData.slice(1).map(r => r[1]);
+  const reportedStores = new Set(latestData.map(r => r[2]));
+  const missingStores = allStoreNames.filter(s => !reportedStores.has(s));
+
+  return { anomalyCount, lowConfidenceCount, latestMonth, missingStores };
+}
+
+/**
+ * 回収率を手動修正
+ */
+function updateVaporRecoveryRate(yearMonth, storeCode, deviceType, lanePair, newRate) {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const data = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === yearMonth && data[i][1] === storeCode &&
+        data[i][3] === deviceType && data[i][4] === lanePair) {
+      const rate = parseFloat(newRate);
+      const inRange = rate >= VR_NORMAL_RANGE.min && rate <= VR_NORMAL_RANGE.max;
+      sheet.getRange(i + 1, 6).setValue(newRate + '%');
+      sheet.getRange(i + 1, 7).setValue(inRange ? 'OK' : 'NG');
+      sheet.getRange(i + 1, 8).setValue('手動修正');
+      sheet.getRange(i + 1, 12).setValue('手動修正 ' + new Date().toLocaleString('ja-JP'));
+      return successResponse({ updated: true });
+    }
+  }
+  return errorResponse('該当データが見つかりません');
+}
+
+/**
+ * 回収率を手動で新規追加（月計表が届かなかった店舗用）
+ * @param {string} yearMonth - "2026年1月"
+ * @param {string} storeCode - "SS023"
+ * @param {Array} entries - [{deviceType, lanePair, rate}]
+ */
+function addVaporRecoveryManual(yearMonth, storeCode, entries) {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+
+  // 拠点名を取得
+  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+  const locData = locSheet.getDataRange().getValues();
+  const locRow = locData.find(r => r[0] === storeCode);
+  const storeName = locRow ? locRow[1] : storeCode;
+
+  const now = new Date().toLocaleString('ja-JP');
+  const rows = entries.map(e => {
+    const rate = parseFloat(e.rate);
+    const inRange = rate >= VR_NORMAL_RANGE.min && rate <= VR_NORMAL_RANGE.max;
+    return [
+      yearMonth, storeCode, storeName, e.deviceType, e.lanePair,
+      rate + '%', inRange ? 'OK' : 'NG', '手動入力', '', '', now, '手動入力'
+    ];
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 12).setValues(rows);
+  }
+
+  return successResponse({ added: rows.length });
+}
+
+/**
+ * 店舗のレーン構成を取得（手動入力フォーム用）
+ * 既存データから該当店舗のレーンペアを推定
+ */
+function getStoreLaneConfig(storeCode) {
+  const config = getConfig();
+  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return { d70Lanes: ['1.2', '3.4'], hasL100R: true };
+
+  const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+  const storeRows = data.filter(r => r[1] === storeCode);
+
+  const d70Lanes = [...new Set(
+    storeRows.filter(r => r[3] === 'D70S').map(r => r[4])
+  )].sort();
+  const hasL100R = storeRows.some(r => r[3] === 'L100R');
+
+  return {
+    d70Lanes: d70Lanes.length > 0 ? d70Lanes : ['1.2', '3.4'],
+    hasL100R
+  };
+}

@@ -99,6 +99,17 @@
     </div>
   </div>
 
+  <!-- ベーパー回収率アラート -->
+  <div id="vr-alert-card" class="bg-white rounded-lg border-2 border-cyan-200 shadow-md overflow-hidden hidden">
+    <div class="bg-cyan-50 p-3 border-b border-cyan-200 flex justify-between items-center cursor-pointer" onclick="navigate('vr')">
+      <h3 class="text-lg font-bold text-cyan-800"><i class="fas fa-tachometer-alt mr-2"></i>ベーパー回収率</h3>
+      <span class="text-xs bg-white px-2 py-1 rounded text-cyan-600 font-bold border border-cyan-200" id="vr-alert-badge">-</span>
+    </div>
+    <div id="vr-alert-body" class="p-4">
+      <div class="text-sm text-gray-500">読み込み中...</div>
+    </div>
+  </div>
+
   <!-- 4月実施一括発注アラート -->
   <div class="bg-white rounded-lg border-2 border-blue-200 shadow-md overflow-hidden">
     <div class="bg-blue-50 p-3 border-b border-blue-200">
@@ -124,8 +135,9 @@ function dashboardInit(f=false) {
 
   if(!f && window.g_cache.dashboard) { 
     console.log('📦 Using cached dashboard data');
-    renderDashboard(window.g_cache.dashboard); 
+    renderDashboard(window.g_cache.dashboard);
     loadAllBulkOrderAlerts();
+    loadVRAlert();
     return; 
   }
 
@@ -159,6 +171,7 @@ function dashboardInit(f=false) {
       } catch(e) {
         console.error('❌ loadAllBulkOrderAlerts call failed:', e);
       }
+      try { loadVRAlert(); } catch(e) { console.error('VR alert load failed:', e); }
     })
     .withFailureHandler(e => {
       console.error('❌ Dashboard data fetch failed', e);
@@ -1020,6 +1033,47 @@ function bulkCreateEmailsParts() {
       })
       .createBulkOrderGmailDraft(equipmentId);
   }
+}
+
+// ── ベーパー回収率アラート ──
+function loadVRAlert() {
+  google.script.run
+    .withSuccessHandler(function(summary) {
+      var card = document.getElementById('vr-alert-card');
+      var badge = document.getElementById('vr-alert-badge');
+      var body = document.getElementById('vr-alert-body');
+
+      if (!summary || !summary.latestMonth) {
+        card.classList.add('hidden');
+        return;
+      }
+
+      card.classList.remove('hidden');
+      var total = summary.anomalyCount + summary.lowConfidenceCount + summary.missingStores.length;
+      badge.textContent = total > 0 ? total + '件要対応' : '正常';
+
+      var html = '<div class="text-sm text-gray-600 mb-2">最新データ: ' + summary.latestMonth + '</div>';
+
+      if (summary.anomalyCount > 0) {
+        html += '<div class="flex items-center gap-2 mb-1"><span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs">異常値</span><span class="text-sm">' + summary.anomalyCount + '件 (正常範囲: 0.05%〜0.2%)</span></div>';
+      }
+      if (summary.lowConfidenceCount > 0) {
+        html += '<div class="flex items-center gap-2 mb-1"><span class="bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded text-xs">要確認</span><span class="text-sm">' + summary.lowConfidenceCount + '件 (PDF読取精度低)</span></div>';
+      }
+      if (summary.missingStores.length > 0) {
+        html += '<div class="flex items-center gap-2 mb-1"><span class="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs">未報告</span><span class="text-sm">' + summary.missingStores.join(', ') + '</span></div>';
+      }
+      if (total === 0) {
+        html += '<div class="text-green-600 text-sm">全店舗正常</div>';
+      }
+      html += '<div class="mt-2"><button onclick="navigate(\'vr\')" class="text-cyan-600 hover:underline text-xs">詳細を見る →</button></div>';
+
+      body.innerHTML = html;
+    })
+    .withFailureHandler(function() {
+      document.getElementById('vr-alert-card').classList.add('hidden');
+    })
+    .getVaporRecoverySummary();
 }
 
 </script>

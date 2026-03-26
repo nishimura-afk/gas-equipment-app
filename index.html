@@ -387,6 +387,7 @@
       <button onclick="navigate('dashboard')" id="nav-dashboard" class="nav-btn px-4 py-3 font-medium hover:bg-gray-50 border-b-2 border-transparent text-gray-600 whitespace-nowrap"><i class="fas fa-chart-pie mr-2"></i>ダッシュボード</button>
       <button onclick="navigate('list')" id="nav-list" class="nav-btn px-4 py-3 font-medium hover:bg-gray-50 border-b-2 border-transparent text-gray-600 whitespace-nowrap"><i class="fas fa-list mr-2"></i>設備一覧</button>
       <button onclick="navigate('email')" id="nav-email" class="nav-btn px-4 py-3 font-medium hover:bg-gray-50 border-b-2 border-transparent text-gray-600 whitespace-nowrap"><i class="fas fa-envelope mr-2"></i>メール作成</button>
+      <button onclick="navigate('vr')" id="nav-vr" class="nav-btn px-4 py-3 font-medium hover:bg-gray-50 border-b-2 border-transparent text-gray-600 whitespace-nowrap"><i class="fas fa-tachometer-alt mr-2"></i>回収率</button>
     </nav>
 
     <div class="p-6">
@@ -394,6 +395,7 @@
       <div id="view-dashboard" class="view-section hidden"><?!= include('dashboard'); ?></div>
       <div id="view-list" class="view-section hidden"><?!= include('equipment-list'); ?></div>
       <div id="view-email" class="view-section hidden"><?!= include('email-draft'); ?></div>
+      <div id="view-vr" class="view-section hidden"><?!= include('vapor-recovery'); ?></div>
     </div>
   </div>
 
@@ -418,6 +420,7 @@
       if (viewId === 'dashboard' && window.dashboardInit) dashboardInit(false);
       if (viewId === 'list' && window.listInit) listInit(false);
       if (viewId === 'email' && window.emailInit) emailInit(false);
+      if (viewId === 'vr' && window.vrInit) vrInit();
     }
     function showLoading(show) { document.getElementById('loading').classList.toggle('hidden', !show); }
     function clearCache(key) { if (key) delete window.g_cache[key]; else window.g_cache = {}; }
