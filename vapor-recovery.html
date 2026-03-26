@@ -25,8 +25,8 @@
     <div>
       <label class="block text-sm text-gray-600 mb-1">表示月数</label>
       <select id="vr-months-back" onchange="vrLoad()" class="border rounded px-3 py-2 text-sm">
-        <option value="1">直近1ヶ月</option>
-        <option value="3" selected>直近3ヶ月</option>
+        <option value="1" selected>直近1ヶ月</option>
+        <option value="3">直近3ヶ月</option>
         <option value="6">直近6ヶ月</option>
         <option value="12">直近12ヶ月</option>
       </select>
@@ -141,6 +141,10 @@ function vrLoad() {
   showLoading(true);
   google.script.run
     .withSuccessHandler(function(data) {
+      // 配列→オブジェクトに変換
+      data.records = (data.rows || []).map(function(r) {
+        return {yearMonth:r[0],storeCode:r[1],storeName:r[2],deviceType:r[3],lanePair:r[4],rate:r[5],inRange:r[6],confidence:r[7],pdfLink:r[8]};
+      });
       vrData = data;
       updateStoreFilter(data.stores);
       vrRender();
@@ -148,12 +152,14 @@ function vrLoad() {
     })
     .withFailureHandler(function(err) {
       showLoading(false);
-      alert('回収率データの取得に失敗: ' + err.message);
+      var msg = (err && err.message) ? err.message : String(err);
+      document.getElementById('vr-table-body').innerHTML = '<tr><td colspan="9" class="px-3 py-8 text-center text-red-500">エラー: ' + msg + '</td></tr>';
     })
     .getVaporRecoveryData(months);
 
   // サマリーも取得
   google.script.run
+    .withFailureHandler(function(err) { console.error('VR summary error:', err); })
     .withSuccessHandler(function(summary) {
       document.getElementById('vr-latest-month').textContent = summary.latestMonth || '-';
       document.getElementById('vr-anomaly-count').textContent = summary.anomalyCount;

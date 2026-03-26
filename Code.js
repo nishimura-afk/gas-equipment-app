@@ -701,47 +701,89 @@ function createNozzleCoverProject() {
 /** 回収率の正常範囲 */
 const VR_NORMAL_RANGE = { min: 0.05, max: 0.2 };
 
+/** 回収率シートID（見積管理DB） */
+const VR_SPREADSHEET_ID = '17FKM50xNHEcftYmZ2u1O2VrAtPKnKm5E5dG1tnIR6fo';
+
+/**
+ * 年月の値を文字列に正規化（Date型対策）
+ * Date → "2025年10月"、文字列はそのまま
+ */
+function normalizeYearMonth(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    return val.getFullYear() + '年' + (val.getMonth() + 1) + '月';
+  }
+  return String(val);
+}
+
+/**
+ * 回収率シートを取得（メインスプレッドシートに無い場合は見積管理DBから）
+ */
+function getVRSheet() {
+  try {
+    return getSheet(getConfig().SHEET_NAMES.VAPOR_RECOVERY);
+  } catch (e) {
+    // メインスプレッドシートに無い場合、見積管理DBから取得
+    const ss = SpreadsheetApp.openById(VR_SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('回収率');
+    if (!sheet) throw new Error('回収率シートが見つかりません（ID: ' + VR_SPREADSHEET_ID + '）');
+    return sheet;
+  }
+}
+
 /**
  * 回収率データを取得（最新N ヶ月分）
- * 末尾から必要行数だけ読み取り高速化
  */
 function getVaporRecoveryData(monthsBack) {
-  const config = getConfig();
-  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return { records: [], stores: [], latestMonth: '' };
+  try {
+    const sheet = getVRSheet();
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { rows: [], stores: [], latestMonth: '', allMonths: [] };
 
-  const n = monthsBack || 3;
-  // 1ヶ月あたり最大 26店舗 × 6レーン = 約156行。余裕を持って200行/月
-  const readRows = Math.min(lastRow - 1, n * 200);
-  const startRow = lastRow - readRows + 1;
-  const data = sheet.getRange(startRow, 1, readRows, 12).getValues();
+    const n = monthsBack || 1;
+    // 必要な列だけ読む（A〜I = 9列）
+    const readRows = Math.min(lastRow - 1, n * 200);
+    const startRow = lastRow - readRows + 1;
+    const data = sheet.getRange(startRow, 1, readRows, 9).getValues();
 
-  // 年月を収集してソート
-  const allMonths = [...new Set(data.map(r => r[0]).filter(Boolean))].sort();
-  const latestMonth = allMonths[allMonths.length - 1] || '';
-  const targetMonths = new Set(allMonths.slice(-n));
+    // 全セルを文字列化（Date型やオブジェクトの直列化問題を回避）
+    var allMonths = [];
+    var monthSet = {};
+    for (var i = 0; i < data.length; i++) {
+      data[i][0] = normalizeYearMonth(data[i][0]);
+      var m = data[i][0];
+      if (m && !monthSet[m]) { monthSet[m] = true; allMonths.push(m); }
+    }
+    allMonths.sort();
+    var latestMonth = allMonths[allMonths.length - 1] || '';
+    var targetMonths = {};
+    var sliced = allMonths.slice(-n);
+    for (var j = 0; j < sliced.length; j++) targetMonths[sliced[j]] = true;
 
-  const records = data
-    .filter(r => r[0] && targetMonths.has(r[0]))
-    .map(r => ({
-      yearMonth: r[0],
-      storeCode: r[1],
-      storeName: r[2],
-      deviceType: r[3],
-      lanePair: r[4],
-      rate: r[5],
-      inRange: r[6],
-      confidence: r[7],
-      pdfLink: r[8],
-      fileName: r[9],
-      fetchedAt: r[10],
-      note: r[11]
-    }));
+    var rows = [];
+    var storeSet = {};
+    for (var k = 0; k < data.length; k++) {
+      var r = data[k];
+      if (r[0] && targetMonths[r[0]]) {
+        // 回収率: 数値0.0014→"0.14%"に変換、既に%付き文字列ならそのまま
+        var rateVal = r[5];
+        var rateStr;
+        if (typeof rateVal === 'number') {
+          rateStr = (rateVal * 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '') + '%';
+        } else {
+          rateStr = String(rateVal);
+        }
+        rows.push([String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), rateStr, String(r[6]), String(r[7]), String(r[8] || '')]);
+        if (r[2] && !storeSet[r[2]]) storeSet[String(r[2])] = true;
+      }
+    }
+    var stores = Object.keys(storeSet).sort();
 
-  const stores = [...new Set(records.map(r => r.storeName))].sort();
-
-  return { records, stores, latestMonth, allMonths: allMonths.slice(-12) };
+    return { rows: rows, stores: stores, latestMonth: latestMonth, allMonths: allMonths.slice(-12) };
+  } catch (e) {
+    Logger.log('getVaporRecoveryData error: ' + e.message);
+    return { rows: [], stores: [], latestMonth: '', allMonths: [], error: e.message };
+  }
 }
 
 /**
@@ -749,34 +791,54 @@ function getVaporRecoveryData(monthsBack) {
  * 末尾200行だけ読み取り高速化
  */
 function getVaporRecoverySummary() {
-  const config = getConfig();
-  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
-  const lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
+  try {
+    var config = getConfig();
+    var sheet = getVRSheet();
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
 
-  // 最新1ヶ月分 = 末尾200行で十分
-  const readRows = Math.min(lastRow - 1, 200);
-  const startRow = lastRow - readRows + 1;
-  const data = sheet.getRange(startRow, 1, readRows, 8).getValues();
+    var readRows = Math.min(lastRow - 1, 200);
+    var startRow = lastRow - readRows + 1;
+    var data = sheet.getRange(startRow, 1, readRows, 8).getValues();
 
-  // 最新月を特定
-  const allMonths = [...new Set(data.map(r => r[0]).filter(Boolean))].sort();
-  const latestMonth = allMonths[allMonths.length - 1] || '';
-  if (!latestMonth) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
+    // 年月をDate→文字列に正規化
+    for (var z = 0; z < data.length; z++) {
+      data[z][0] = normalizeYearMonth(data[z][0]);
+    }
 
-  const latestData = data.filter(r => r[0] === latestMonth);
+    var monthSet = {};
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0]) monthSet[data[i][0]] = true;
+    }
+    var allMonths = Object.keys(monthSet).sort();
+    var latestMonth = allMonths[allMonths.length - 1] || '';
+    if (!latestMonth) return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [] };
 
-  const anomalyCount = latestData.filter(r => r[6] === 'NG').length;
-  const lowConfidenceCount = latestData.filter(r => r[7] === '要確認').length;
+    var anomalyCount = 0;
+    var lowConfidenceCount = 0;
+    var reportedStores = {};
+    for (var j = 0; j < data.length; j++) {
+      if (data[j][0] === latestMonth) {
+        if (data[j][6] === 'NG') anomalyCount++;
+        if (data[j][7] === '要確認') lowConfidenceCount++;
+        if (data[j][2]) reportedStores[data[j][2]] = true;
+      }
+    }
 
-  // 全26店舗中、最新月にデータがない店舗
-  const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
-  const locData = locSheet.getDataRange().getValues();
-  const allStoreNames = locData.slice(1).map(r => r[1]);
-  const reportedStores = new Set(latestData.map(r => r[2]));
-  const missingStores = allStoreNames.filter(s => !reportedStores.has(s));
+    var locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
+    var locData = locSheet.getDataRange().getValues();
+    var missingStores = [];
+    for (var k = 1; k < locData.length; k++) {
+      if (locData[k][1] && !reportedStores[locData[k][1]]) {
+        missingStores.push(locData[k][1]);
+      }
+    }
 
-  return { anomalyCount, lowConfidenceCount, latestMonth, missingStores };
+    return { anomalyCount: anomalyCount, lowConfidenceCount: lowConfidenceCount, latestMonth: latestMonth, missingStores: missingStores };
+  } catch (e) {
+    Logger.log('getVaporRecoverySummary error: ' + e.message);
+    return { anomalyCount: 0, lowConfidenceCount: 0, latestMonth: '', missingStores: [], error: e.message };
+  }
 }
 
 /**
@@ -784,7 +846,7 @@ function getVaporRecoverySummary() {
  */
 function updateVaporRecoveryRate(yearMonth, storeCode, deviceType, lanePair, newRate) {
   const config = getConfig();
-  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const sheet = getVRSheet();
   const data = sheet.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
@@ -810,7 +872,7 @@ function updateVaporRecoveryRate(yearMonth, storeCode, deviceType, lanePair, new
  */
 function addVaporRecoveryManual(yearMonth, storeCode, entries) {
   const config = getConfig();
-  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const sheet = getVRSheet();
 
   // 拠点名を取得
   const locSheet = getSheet(config.SHEET_NAMES.MASTER_LOCATION);
@@ -841,7 +903,7 @@ function addVaporRecoveryManual(yearMonth, storeCode, entries) {
  */
 function getStoreLaneConfig(storeCode) {
   const config = getConfig();
-  const sheet = getSheet(config.SHEET_NAMES.VAPOR_RECOVERY);
+  const sheet = getVRSheet();
   const lastRow = sheet.getLastRow();
   if (lastRow <= 1) return { d70Lanes: ['1.2', '3.4'], hasL100R: true };
 
