@@ -774,7 +774,9 @@ function getVaporRecoveryData(monthsBack) {
           rateStr = String(rateVal);
         }
         // [yearMonth,storeCode,storeName,deviceType,lanePair,rate,inRange,confidence,pdfLink,requestDate,repairDate,memo]
-        rows.push([String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), rateStr, String(r[6]), String(r[7]), String(r[8] || ''), String(r[12] || ''), String(r[13] || ''), String(r[14] || '')]);
+        var reqDate = r[12] instanceof Date ? Utilities.formatDate(r[12], Session.getScriptTimeZone(), 'M/d') : String(r[12] || '');
+        var repDate = r[13] instanceof Date ? Utilities.formatDate(r[13], Session.getScriptTimeZone(), 'M/d') : String(r[13] || '');
+        rows.push([String(r[0]), String(r[1]), String(r[2]), String(r[3]), String(r[4]), rateStr, String(r[6]), String(r[7]), String(r[8] || ''), reqDate, repDate, String(r[14] || '')]);
         if (r[2] && !storeSet[r[2]]) storeSet[String(r[2])] = true;
       }
     }
@@ -964,7 +966,7 @@ function createVRInspectionDraft(yearMonth, storeName, deviceType, lanePair, rat
 function recordVRInspectionRequest(yearMonth, storeCode, deviceType, lanePair) {
   var sheet = getVRSheet();
   var data = sheet.getDataRange().getValues();
-  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy/MM/dd');
+  var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d');
 
   for (var i = 1; i < data.length; i++) {
     var ym = normalizeYearMonth(data[i][0]);
